@@ -18,3 +18,17 @@
 # .NET (server .NET ise)
 **/bin/
 **/obj/
+
+# Node
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# Env
+.env
+.env.*
+
+# Logs
+*.log
+.DS_Store
