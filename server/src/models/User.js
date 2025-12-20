@@ -10,12 +10,4 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-  mongoose.connection.on('connected', () => {
-    console.log('Mongoose bağlandı.');
-  });
-
-  mongoose.connection.on('error', (err) => {
-    console.log('Mongoose bağlantı hatası: ' + err);
-  });
-
 module.exports = mongoose.models.User || mongoose.model("User", UserSchema);
