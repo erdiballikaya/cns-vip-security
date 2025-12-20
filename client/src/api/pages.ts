@@ -1,5 +1,6 @@
 import { http } from "./http";
-import type { FieldDto } from "../components/AddFieldModal";
+import type { FieldDto } from "../types/field";
+
 
 // Page schema (site-create gibi) için ayrı endpoint
 export async function addPageField(pageKey: string, payload: FieldDto) {

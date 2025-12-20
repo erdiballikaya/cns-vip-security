@@ -2,22 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Modal from "../ui/Modal"; // sende modal nerede ise ona göre
 import { useToast } from "./ToastProvider";
 import { http } from "../api/http";
-
-type FieldType = "text" | "number" | "boolean" | "select" | "image";
-
-type Option = { label: string; value: string };
-
-type FieldDto = {
-  key: string;
-  label: string;
-  type: FieldType;
-  required?: boolean;
-  min?: number;
-  max?: number;
-  options?: Option[];
-  defaultValue?: any;
-  order?: number; // var ama UI'da yönetmiyoruz
-};
+import type { FieldDto, FieldType, Option } from "../types/field";
 
 type Props =
   | {
