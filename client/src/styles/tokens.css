@@ -1,0 +1,25 @@
+:root{
+  --bg: #0b1220;
+  --panel: rgba(255,255,255,.06);
+  --panel2: rgba(255,255,255,.09);
+  --border: rgba(255,255,255,.10);
+
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.68);
+
+  /* CNS vibe: teal ağırlıklı kurumsal vurgu */
+  --brand: #0aa2b4;
+  --brand2:#2bd4c5;
+
+  --danger:#ff5d5d;
+  --shadow: 0 20px 60px rgba(0,0,0,.45);
+
+  --r-lg: 18px;
+  --r-md: 14px;
+  --r-sm: 12px;
+
+  --container: 1120px;
+  --gap: 16px;
+
+  --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+}

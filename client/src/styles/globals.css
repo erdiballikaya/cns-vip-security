@@ -1,0 +1,73 @@
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family:var(--font);
+  color:var(--text);
+  background:
+    radial-gradient(1200px 700px at 80% -10%, rgba(1, 33, 36, 0.25), transparent 60%),
+    radial-gradient(900px 600px at 10% 10%, #2bd4c52e, transparent 40%),
+    linear-gradient(180deg, #070b14 0%, #0b1220 60%, #070b14 100%);
+}
+a{ color:inherit; text-decoration:none; }
+button,input{ font-family:inherit; }
+
+/* -------------------------------------- */
+/* 🔳 MINIMALIST BUTTON STYLES (Outline) */
+/* -------------------------------------- */
+
+button {
+  /* Temel Görünüm */
+  cursor: pointer;
+  
+  /* Arka plan rengini kaldırma veya koyu yapma */
+  background: transparent; /* Minimalizm için arka planı şeffaf yap */
+  color: #2bd4c5; /* Metin rengini tema rengi yap */
+  
+  /* Sınır (Border) ile vurgulama */
+  border: 1px solid #2bd4c5; 
+  border-radius: 4px; /* Köşeleri daha keskin veya hafif yuvarlak */
+  
+  /* Boyutlandırma ve Font */
+  padding: 10px 20px; 
+  font-size: 15px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  
+  /* Geçişler */
+  transition: all 0.3s ease;
+}
+
+/* Hover Efekti: Butonun üzerine gelindiğinde */
+button:hover {
+  /* Butonu tema rengiyle doldur */
+  background: #2bd4c5;
+  color: #070b14; /* Metin rengini koyu arka plan rengine çevir (Kontrast için) */
+  
+  /* Hafif bir dış gölge ekleme (parlama) */
+  box-shadow: 0 0 10px rgba(43, 212, 197, 0.6); 
+  transform: translateY(-1px); /* Çok hafif yukarı kayma */
+}
+
+/* Aktif Durum: Butona tıklandığında */
+button:active {
+  transform: translateY(0);
+  background: #19a396; /* Biraz daha koyu bir dolgu */
+}
+
+.btn .delete{
+  background-color: red;
+}
+
+.mailErr {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: break-word;
+}
+
+.label{
+  margin-bottom: 2%;
+}
+

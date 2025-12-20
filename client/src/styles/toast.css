@@ -1,0 +1,52 @@
+.toastViewport {
+  position: fixed;
+  /* Sağ üstteki butonların üzerine binmemesi için sağdan boşluk verdik */
+  right: clamp(20px, 15%, 100px); 
+  top: 20px;
+  z-index: 9999;
+  display: grid;
+  gap: 10px;
+  width: 320px;
+  /* Altındaki butonlara tıklanabilmesi için */
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: rgba(15,23,42,.95);
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148,163,184,.25);
+  cursor: pointer;
+  
+  /* Sağdan içeri kayma animasyonu */
+  animation: toastSlideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Animasyon: Hem sağdan gelir hem de hafifçe belirir */
+@keyframes toastSlideIn {
+  from {
+    transform: translateX(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Mobil cihazlarda butonlar genellikle alta indiği için konumu merkeze çekebiliriz */
+@media (max-width: 640px) {
+  .toastViewport {
+    right: 20px; /* Mobilde tekrar kenara yaslanabilir */
+    width: calc(100% - 40px);
+  }
+}
+
+/* Renk ve Tipografi Stilleri */
+.toast-success{ border-color: rgba(16,185,129,.45); }
+.toast-error{ border-color: rgba(239,68,68,.45); }
+.toast-info{ border-color: rgba(10,162,180,.45); }
+
+.toastTitle { font-weight: 700; font-size: 13px; color: #fff; }
+.toastMsg { font-size: 13px; color: #94a3b8; }

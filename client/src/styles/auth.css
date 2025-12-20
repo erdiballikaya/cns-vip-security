@@ -1,0 +1,64 @@
+.authWrap{
+  min-height:100vh;
+  display:grid;
+  grid-template-columns: 1.1fr .9fr;
+}
+@media (max-width: 980px){
+  .authWrap{ grid-template-columns: 1fr; }
+  .authLeft{ display:none; }
+}
+
+.authLeft{
+  padding:48px;
+  position:relative;
+}
+.authHero{
+  max-width: 560px;
+}
+.brandRow{ display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.brandMark{
+  width:44px; height:44px; border-radius:14px;
+  background-image: url("../assets/cns-mark.png");
+    background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  box-shadow: 0 14px 40px rgba(10,162,180,.18);
+}
+.brandName{ font-weight:800; letter-spacing:.6px; }
+.heroTitle{ font-size:44px; line-height:1.05; margin:18px 0 10px; }
+.heroSub{ color:var(--muted); font-size:15px; line-height:1.6; max-width: 52ch; }
+.heroStats{
+  margin-top:22px;
+  display:flex; gap:12px; flex-wrap:wrap;
+}
+.stat{
+  background:rgba(255,255,255,.06);
+  border:1px solid var(--border);
+  padding:12px 14px;
+  border-radius:14px;
+}
+.stat b{ display:block; font-size:18px; }
+.stat span{ color:var(--muted); font-size:12px; }
+
+.authRight{
+  padding:48px 24px;
+  display:grid;
+  place-items:center;
+}
+.card{
+  width:min(440px, 100%);
+  background:rgba(255,255,255,.06);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  box-shadow: var(--shadow);
+  padding:22px;
+}
+.cardHead{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.cardTitle{ font-size:18px; font-weight:800; }
+.cardSub{ color:var(--muted); font-size:13px; margin-top:6px; }
+.cardBody{ margin-top:16px; display:grid; gap:12px; }
+.row{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:8px; }
+.link{ color: rgba(43,212,197,.92); font-size:13px; }
+.divider{ height:1px; background: rgba(255,255,255,.10); margin:14px 0; }
+.small{ color:var(--muted); font-size:12px; line-height:1.6; }

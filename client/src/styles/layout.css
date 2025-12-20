@@ -1,0 +1,191 @@
+/*
+** Daha Minimalist ve Modern Uygulama Kabuğu CSS'i **
+** Yapılan Değişiklikler: Yumuşak köşeler, sade sınırlar, hafifletilmiş renkler. **
+*/
+
+/* ----- Layout grid ----- */
+.appShell{
+  min-height:100vh;
+  display:grid;
+  grid-template-rows: 64px 1fr 56px; /* header / content / footer */
+}
+
+/* ----- Header ----- */
+.appHeader{
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px; /* Gap artırıldı */
+  padding: 0 24px; /* Padding artırıldı */
+  
+  /* Minimalizm: Sınırı incelt ve rengi koyulaştır */
+  border-bottom:1px solid rgba(255, 255, 255, 0.08); /* var(--border) yerine inceltilmiş renk */
+  
+  /* Mevcut buzlu cam efekti korundu */
+  background: rgba(7, 11, 20, 0.85); /* Arka planı biraz daha koyu ve opak yapıldı */
+  backdrop-filter: blur(14px); /* Blur artırıldı */
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:12px; /* Gap artırıldı */
+  min-width: 200px;
+}
+.brandMark{
+  width:40px;height:40px;
+  border-radius:12px; /* Köşe inceltildi */
+  box-shadow: 0 8px 20px rgba(10,162,180,.12); /* Gölge hafifletildi */
+}
+.brandText{ display:flex; flex-direction:column; line-height:1.2; }
+.brandName{ font-weight:800; letter-spacing:.2px; font-size:15px; } /* Font kalınlığı ve boyutu ayarlandı */
+.brandSub{ color:rgba(255, 255, 255, 0.5); font-size:12px; } /* var(--muted) yerine daha açık bir değer */
+
+.headerLeft{
+  display:flex;
+  align-items:center;
+  gap:24px; /* Gap artırıldı */
+}
+.pageTitle{
+  font-weight:700; /* Kalınlık azaltıldı */
+  font-size:15px;
+  color: var(--text);
+  opacity: .95;
+  white-space: nowrap;
+}
+
+.headerRight{
+  display:flex;
+  align-items:center;
+  gap:12px; /* Gap artırıldı */
+}
+
+/* Menu button: desktop'ta gizle */
+.menuBtn{
+  display:none;
+}
+
+/* ----- Body area (sidebar + main) ----- */
+.appBody{
+  display:grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 0;
+}
+
+/* Sidebar (desktop) */
+.sidebar{
+  /* Sınırı incelt ve rengi koyulaştır */
+  border-right:1px solid rgba(255, 255, 255, 0.08); /* var(--border) yerine inceltilmiş renk */
+  
+  /* Minimalizm: Arka planı tamamen kaldır/koyulaştır */
+  background: rgba(10, 12, 20, 0.5); /* Arka plan hafifçe koyu bir ton */
+  padding: 16px; /* Padding artırıldı */
+}
+.nav{
+  display:grid;
+  gap:6px; /* Gap azaltıldı */
+  margin-top: 12px;
+}
+.navItem{
+  padding:12px; /* Padding artırıldı */
+  border-radius:10px; /* Köşeler yumuşatıldı */
+  border:1px solid transparent;
+  color:rgba(255, 255, 255, 0.55); /* var(--muted) yerine daha belirgin bir muted ton */
+  background: transparent;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+/* Minimalist Hover: Sadece hafif bir arka plan değişikliği */
+.navItem:hover{
+  color:var(--text);
+  background: rgba(255,255,255,.05);
+  border-color: transparent; /* Border kaldırıldı */
+}
+/* Minimalist Active: Tema rengi vurgusu (arka planı doldurmadan) */
+.navItemActive{
+  color:#2bd4c5; /* Tema rengi metinde kullanıldı */
+  background: rgba(43, 212, 197, 0.08); /* Çok hafif bir arka plan rengi */
+  border-color: rgba(43, 212, 197, 0.15); /* İnce bir tema sınır */
+  font-weight: 600;
+}
+
+/* Main */
+.appMain{
+  min-width:0;
+}
+.container {
+  max-width: var(--container);
+  padding: 24px;
+  margin: 0 auto;
+}
+
+/* PANEL İÇİN FULL GENİŞLİK */
+.container--fluid {
+  max-width: 100%;
+}
+
+
+/* ----- Footer ----- */
+.appFooter{
+  /* Sınırı incelt ve rengi koyulaştır */
+  border-top:1px solid rgba(255, 255, 255, 0.08); 
+  background: rgba(10, 12, 20, 0.5); /* Sidebar ile aynı hafif koyu ton */
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 0 24px;
+  color: rgba(255, 255, 255, 0.4); /* Daha soluk ve minimal */
+  font-size: 12px;
+}
+
+/* ----- Mobile/Tablet (<= 980px) ----- */
+@media (max-width: 980px){
+  .appBody{
+    grid-template-columns: 1fr; 
+  }
+  .sidebar{
+    display:none;
+  }
+  .menuBtn{ 
+    display:inline-flex; 
+    /* Mobil butonu burada eklenmemiş ama varsayarak: */
+    width: 40px; height: 40px; 
+    border-radius: 8px; 
+    align-items: center; justify-content: center;
+    color: var(--text);
+  }
+}
+
+/* ----- Drawer (mobile sidebar) ----- */
+.drawerOverlay{
+  position:fixed;
+  inset:0;
+  z-index: 60;
+  background: rgba(0,0,0,.6); /* Daha opak hale getirildi */
+  display:grid;
+  grid-template-columns: 1fr;
+}
+
+.drawer{
+  width: min(320px, 86vw);
+  height: 100%;
+  /* Daha koyu ve keskin bir görünüm */
+  background: #070b14; 
+  border-right:1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.5); /* Daha belirgin gölge */
+}
+.drawerTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding: 4px 2px 10px;
+}

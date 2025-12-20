@@ -1,0 +1,41 @@
+.siteTable {
+  display: grid;
+  gap: 10px;
+}
+
+.siteRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.12);
+  cursor: pointer;
+  transition: .15s ease;
+}
+
+.siteRow:hover {
+  background: rgba(255,255,255,.06);
+  border-color: rgba(10,162,180,.35);
+}
+
+.siteMain {
+  display: grid;
+  gap: 4px;
+}
+
+.siteName {
+  font-weight: 900;
+}
+
+.siteAddress {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.siteMeta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}

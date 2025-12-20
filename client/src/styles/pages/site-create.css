@@ -1,0 +1,20 @@
+.siteHints ul{
+  margin:0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.imagePreview{
+  width: min(420px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  overflow: hidden;
+  background: rgba(0,0,0,.20);
+}
+.imagePreview img{ width: 100%; display:block; }
+.fileRow{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
