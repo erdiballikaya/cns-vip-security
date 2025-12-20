@@ -1,0 +1,20 @@
+# env
+.env
+.env.*
+*.local
+
+# node
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# logs
+*.log
+
+# mac
+.DS_Store
+
+# .NET (server .NET ise)
+**/bin/
+**/obj/
