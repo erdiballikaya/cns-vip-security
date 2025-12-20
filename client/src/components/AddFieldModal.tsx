@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Modal from "../ui/Modal"; // sende modal nerede ise ona göre
 import { useToast } from "./ToastProvider";
 import { http } from "../api/http";

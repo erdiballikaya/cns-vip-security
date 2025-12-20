@@ -1,4 +1,3 @@
-import React from "react";
 export type NavKey = "dashboard" | "sites" | "users" | "forms" | "reports";
 
 function Item({ href, label, active }: { href: string; label: string; active?: boolean }) {
