@@ -1,6 +1,7 @@
 import { http } from "./http";
 
-export type FieldType = "text" | "number" | "boolean" | "select" | "image";
+export type FieldType = "text" | "number" | "boolean" | "select" | "image" | "matrix";
+
 export type FormField = {
   key: string; label: string; type: FieldType;
   required?: boolean; order?: number;

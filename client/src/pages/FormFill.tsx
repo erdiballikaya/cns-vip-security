@@ -18,6 +18,7 @@ import {
   sendToOne,
   updateSubmission,
   type FormSubmissionDto,
+  generatePdf, // sende ayrı import ediyorsun; tek yerden olsun diye burada da bıraktım
 } from "../api/formSubmissions";
 
 import { getSiteById, type SiteDto } from "../api/sites";
@@ -38,14 +39,26 @@ function shortErr(s: string, max = 80) {
   return t.slice(0, max) + "…";
 }
 
+// matrix helpers
+function hasAnyCheckedMatrixValue(mv: any) {
+  if (!mv || typeof mv !== "object") return false;
+  for (const rk of Object.keys(mv)) {
+    const row = mv[rk];
+    if (!row || typeof row !== "object") continue;
+    for (const ck of Object.keys(row)) {
+      if (row[ck]) return true;
+    }
+  }
+  return false;
+}
+
 export default function FormFill() {
-  // ✅ route: /forms/fill/:submissionId
   const { submissionId } = useParams<{ submissionId: string }>();
 
   const toast = useToast();
   const { me } = useAuth();
 
-  // yetkiler
+  // permissions
   const canUse = can(me, "forms.use") || can(me, "forms.builder");
   const canSend = can(me, "forms.send") || can(me, "forms.builder");
 
@@ -59,7 +72,7 @@ export default function FormFill() {
 
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
-  // confirmations
+  // confirm dialogs
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
 
   // manual send
@@ -67,8 +80,8 @@ export default function FormFill() {
   const [manualTo, setManualTo] = useState("");
   const [manualConfirmOpen, setManualConfirmOpen] = useState(false);
 
-  // ✅ mail log detay toggle
-  const [openLog, setOpenLog] = useState<Record<string, boolean>>({}); // key: `${i}-${to}-${at}`
+  // mail log details toggle
+  const [openLog, setOpenLog] = useState<Record<string, boolean>>({});
   const toggleLog = (key: string) => setOpenLog((p) => ({ ...(p || {}), [key]: !p?.[key] }));
 
   if (!submissionId) return <Navigate to="/forms" replace />;
@@ -79,21 +92,38 @@ export default function FormFill() {
     return [...f].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [tpl]);
 
+  // ✅ required check (matrix dahil)
   const requiredMissing = useMemo(() => {
     if (!sortedFields.length) return false;
 
     for (const f of sortedFields) {
       if (!f.required) continue;
+
       const v = values?.[f.key];
 
       if (f.type === "number") {
         if (v === "" || v === null || v === undefined) return true;
         continue;
       }
-      if (f.type === "boolean") continue;
 
+      if (f.type === "boolean") {
+        // boolean required ise: checkbox unchecked kabul edilebilir mi?
+        // Genelde required boolean = "mutlaka işaretlenmeli" beklenir.
+        // Eğer "false da geçerli" diyorsan burayı hiç kontrol etme.
+        // Ben "varlığı yeterli" gibi davranıyorum:
+        continue;
+      }
+
+      if (f.type === "matrix") {
+        // required matrix: en az 1 hücre seçili
+        if (!hasAnyCheckedMatrixValue(v)) return true;
+        continue;
+      }
+
+      // text/select/image gibi
       if (!String(v ?? "").trim()) return true;
     }
+
     return false;
   }, [sortedFields, values]);
 
@@ -127,6 +157,36 @@ export default function FormFill() {
   }, [submissionId]);
 
   const setField = (key: string, v: any) => setValues((p) => ({ ...(p || {}), [key]: v }));
+
+  // ✅ matrix value shape:
+  // values[fieldKey] = { [rowKey]: { [colKey]: true/false } }
+  const getMatrixCell = (fieldKey: string, rowKey: string, colKey: string) => {
+    const mv = values?.[fieldKey];
+    return Boolean(mv?.[rowKey]?.[colKey]);
+  };
+
+  const setMatrixCell = (fieldKey: string, rowKey: string, colKey: string, checked: boolean) => {
+    setValues((prev) => {
+      const p = prev || {};
+      const mv = p[fieldKey] && typeof p[fieldKey] === "object" ? p[fieldKey] : {};
+      const row = mv[rowKey] && typeof mv[rowKey] === "object" ? mv[rowKey] : {};
+
+      return {
+        ...p,
+        [fieldKey]: {
+          ...mv,
+          [rowKey]: {
+            ...row,
+            [colKey]: checked,
+          },
+        },
+      };
+    });
+  };
+
+  const clearMatrix = (fieldKey: string) => {
+    setValues((p) => ({ ...(p || {}), [fieldKey]: {} }));
+  };
 
   const saveDraft = async () => {
     if (!sub) return;
@@ -309,9 +369,111 @@ export default function FormFill() {
       );
     }
 
+    if (f.type === "matrix") {
+      const cols = (f.columns || []) as any[];
+      const rows = (f.rows || []) as any[];
+
+      return (
+        <div key={f.key} className="fieldRow">
+          <div className="fieldRowTop">
+            <div className="fieldRowTitle">
+              {f.label}
+              {f.required ? <span className="fieldRowReq"> *</span> : null}
+              <span className="fieldRowKey">{f.key}</span>
+            </div>
+
+            <button
+              className="btn"
+              style={{ padding: "6px 10px" }}
+              disabled={saving}
+              onClick={() => clearMatrix(f.key)}
+              title="Tüm seçimleri temizle"
+            >
+              Temizle
+            </button>
+          </div>
+
+          <div
+            style={{
+              overflowX: "auto",
+              border: "1px solid rgba(255,255,255,.08)",
+              borderRadius: 12,
+            }}
+          >
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: 10,
+                      borderBottom: "1px solid rgba(255,255,255,.08)",
+                      width: 380,
+                    }}
+                  >
+                    Evrak Kaydı
+                  </th>
+
+                  {cols.map((c) => (
+                    <th
+                      key={c.key}
+                      style={{
+                        textAlign: "center",
+                        padding: 10,
+                        borderBottom: "1px solid rgba(255,255,255,.08)",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={c.subLabel ? `${c.label} — ${c.subLabel}` : c.label}
+                    >
+                      <div style={{ fontWeight: 700 }}>{c.label}</div>
+                      {c.subLabel ? (
+                        <div className="hint" style={{ marginTop: 4 }}>
+                          {c.subLabel}
+                        </div>
+                      ) : null}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.key}>
+                    <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,.06)" }}>{r.label}</td>
+
+                    {cols.map((c) => {
+                      const checked = getMatrixCell(f.key, r.key, c.key);
+                      return (
+                        <td
+                          key={`${r.key}-${c.key}`}
+                          style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,.06)", textAlign: "center" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={saving}
+                            onChange={(e) => setMatrixCell(f.key, r.key, c.key, e.target.checked)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="hint" style={{ marginTop: 8 }}>
+            İpucu: Her satır için personelleri işaretleyebilirsin.
+          </div>
+        </div>
+      );
+    }
+
     // image
     const url = String(v || "");
-    const abs = absUrl(url);  
+    const abs = absUrl(url);
+
     return (
       <div key={f.key} className="fieldRow">
         <div className="fieldRowTop">
@@ -339,7 +501,6 @@ export default function FormFill() {
               const file = e.target.files?.[0];
               if (!file) return;
               await uploadForField(f.key, file);
-              // bazı browser'larda input unmount olabiliyor; null guard:
               if (e.currentTarget) e.currentTarget.value = "";
             }}
           />
@@ -348,7 +509,15 @@ export default function FormFill() {
 
           {url ? (
             <div className="imagePreview" style={{ display: "grid", gap: 8 }}>
-              <img src={abs} alt={f.label} style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)" }} />
+              <img
+                src={abs}
+                alt={f.label}
+                style={{
+                  width: "100%",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,.08)",
+                }}
+              />
               <div className="hint">Fotoğraf yüklü ✅</div>
             </div>
           ) : (
@@ -371,11 +540,33 @@ export default function FormFill() {
     );
   }
 
-  if (!sub || !tpl || !site) {
-    return <Navigate to="/forms" replace />;
-  }
+  if (!sub || !tpl || !site) return <Navigate to="/forms" replace />;
 
   const submissionImageCount = sortedFields.filter((f: any) => f.type === "image" && String(values?.[f.key] || "")).length;
+
+  // PDF butonu (istersen aç)
+  const generatePdfOnly = async () => {
+    if (!sub) return;
+    if (!canSend) return toast.error("Bu işlem için yetkin yok: PDF üretme", "Erişim Engellendi");
+    if (saving) return;
+
+    try {
+      setSaving(true);
+
+      // önce kaydet (pdf güncel values ile üretilsin)
+      const updated = await updateSubmission(sub._id, values);
+      setSub(updated);
+
+      await generatePdf(sub._id);
+
+      toast.success("PDF üretildi", "Başarılı");
+      await refresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "PDF üretilemedi", "Hata");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <AppShell title="Form Doldur" active="forms">
@@ -404,6 +595,12 @@ export default function FormFill() {
             >
               Tamamla ve Mail Gönder
             </button>
+
+            {/* İstersen aktif et
+            <button className="btn" onClick={generatePdfOnly} disabled={saving || !canSend}>
+              PDF Üret
+            </button>
+            */}
           </div>
         }
       >
@@ -449,16 +646,10 @@ export default function FormFill() {
 
               {sub.pdfPath ? (
                 <div className="field">
-                  <a
-                    className="btn btnPdf"
-                    href={absUrl(sub.pdfPath)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                  <a className="btn btnPdf" href={absUrl(sub.pdfPath)} target="_blank" rel="noreferrer">
                     📄 PDF’i Aç
                   </a>
                 </div>
-
               ) : null}
 
               {(sub.mailLog || []).length ? (

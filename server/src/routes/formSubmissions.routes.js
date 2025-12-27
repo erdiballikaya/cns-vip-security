@@ -70,15 +70,31 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
   const site = await Site.findById(sub.siteId).lean();
   if (!site) return res.status(404).json({ message: "Site bulunamadı." });
 
-  // PDF üret (yoksa veya yeniden üretmek istersen burada hep üret)
+  // ✅ 1) PDF üret + DB’ye kaydet (mailden bağımsız)
   const { pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub });
   sub.pdfPath = pdfPath;
   sub.status = "COMPLETED";
+  await sub.save(); // ✅ artık PDF kesin kaydolur
 
-  const recipients = (tpl.recipients || []).map((r) => normalizeEmail(r.email)).filter(Boolean);
-  if (!recipients.length) return res.status(400).json({ message: "Mail alıcıları boş." });
+  const recipients = (tpl.recipients || [])
+    .map((r) => normalizeEmail(r.email))
+    .filter(Boolean);
 
-  const pdfAbs = toDiskPath(pdfPath);
+  // ✅ 2) recipients boşsa 400 dönme, PDF hazır zaten
+  if (!recipients.length) {
+    return res.json({
+      ok: true,
+      pdfPath: sub.pdfPath,
+      mailOk: false,
+      message: "PDF üretildi ama mail alıcısı boş olduğu için mail gönderilmedi.",
+      mailLog: sub.mailLog,
+    });
+  }
+
+  const pdfAbs = toDiskPath(sub.pdfPath);
+
+  // ✅ 3) mail gönderim hatalarını logla ama PDF’yi bozma
+  let anyFail = false;
 
   for (const to of recipients) {
     try {
@@ -90,13 +106,22 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
       });
       sub.mailLog.push({ to, ok: true, at: new Date() });
     } catch (e) {
+      anyFail = true;
       sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
     }
   }
 
   await sub.save();
-  res.json({ ok: true, pdfPath: sub.pdfPath, mailLog: sub.mailLog });
+
+  return res.json({
+    ok: true,
+    pdfPath: sub.pdfPath,
+    mailOk: !anyFail,
+    mailLog: sub.mailLog,
+    message: anyFail ? "PDF üretildi, bazı mailler gönderilemedi." : "PDF üretildi, mailler gönderildi.",
+  });
 });
+
 
 // send to one person
 router.post("/:id/send", auth, permit("forms.send"), async (req, res) => {
@@ -206,6 +231,32 @@ router.delete("/:id", async (req, res) => {
     return res.status(500).json({ message: "Silme başarısız" });
   }
 });
+
+// ✅ PDF üret (mail yok)
+// POST /api/form-submissions/:id/pdf
+router.post("/:id/pdf", auth, permit("forms.send"), async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // 1) submission'ı bul
+    const sub = await FormSubmission.findById(id);
+    if (!sub) return res.status(404).json({ message: "Kayıt bulunamadı." });
+
+    // 2) PDF üret (sende hazır olan fonksiyonu çağır)
+    // Örn: const pdfPath = await generatePdfForSubmission(sub._id);
+    const pdfPath = await renderPdf(sub._id); // ✅ bunu sende hazır olana göre değiştir
+
+    // 3) sub.pdfPath yaz, status değiştirmek istemiyorsan sadece pdfPath set et
+    sub.pdfPath = pdfPath; // örn "/uploads/pdfs/xxx.pdf"
+    await sub.save();
+
+    return res.json({ ok: true, pdfPath: sub.pdfPath });
+  } catch (e) {
+    console.error("PDF GENERATE ERROR:", e);
+    return res.status(500).json({ message: "PDF üretilemedi." });
+  }
+});
+
 
 
 module.exports = router;

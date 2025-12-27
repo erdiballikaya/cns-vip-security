@@ -60,3 +60,11 @@ export async function listSubmissions(params: {
 export async function deleteSubmission(id: string) {
   await http.delete(`/form-submissions/${id}`);
 }
+
+export async function generatePdf(submissionId: string) {
+  const res = await http.post<{ ok: boolean; pdfPath?: string }>(
+    `/form-submissions/${submissionId}/pdf`,
+    {}
+  );
+  return res.data;
+}

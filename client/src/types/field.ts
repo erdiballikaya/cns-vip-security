@@ -1,5 +1,7 @@
-export type FieldType = "text" | "number" | "boolean" | "select" | "image";
+export type FieldType = "text" | "number" | "boolean" | "select" | "image" | "matrix";
 export type Option = { label: string; value: string };
+export type MatrixColumn = { key: string; label: string; subLabel?: string };
+export type MatrixRow = { key: string; label: string };
 
 export type FieldDto = {
   key: string;
@@ -10,5 +12,9 @@ export type FieldDto = {
   max?: number;
   options?: Option[];
   defaultValue?: any;
-  order?: number; // var ama UI'da yönetmiyoruz
+  order?: number;
+
+  // ✅ matrix için
+  columns?: MatrixColumn[];
+  rows?: MatrixRow[];
 };
