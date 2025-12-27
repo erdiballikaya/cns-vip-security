@@ -545,28 +545,28 @@ export default function FormFill() {
   const submissionImageCount = sortedFields.filter((f: any) => f.type === "image" && String(values?.[f.key] || "")).length;
 
   // PDF butonu (istersen aç)
-  const generatePdfOnly = async () => {
-    if (!sub) return;
-    if (!canSend) return toast.error("Bu işlem için yetkin yok: PDF üretme", "Erişim Engellendi");
-    if (saving) return;
+  // const generatePdfOnly = async () => {
+  //   if (!sub) return;
+  //   if (!canSend) return toast.error("Bu işlem için yetkin yok: PDF üretme", "Erişim Engellendi");
+  //   if (saving) return;
 
-    try {
-      setSaving(true);
+  //   try {
+  //     setSaving(true);
 
-      // önce kaydet (pdf güncel values ile üretilsin)
-      const updated = await updateSubmission(sub._id, values);
-      setSub(updated);
+  //     // önce kaydet (pdf güncel values ile üretilsin)
+  //     const updated = await updateSubmission(sub._id, values);
+  //     setSub(updated);
 
-      await generatePdf(sub._id);
+  //     await generatePdf(sub._id);
 
-      toast.success("PDF üretildi", "Başarılı");
-      await refresh();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? "PDF üretilemedi", "Hata");
-    } finally {
-      setSaving(false);
-    }
-  };
+  //     toast.success("PDF üretildi", "Başarılı");
+  //     await refresh();
+  //   } catch (e: any) {
+  //     toast.error(e?.response?.data?.message ?? "PDF üretilemedi", "Hata");
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
 
   return (
     <AppShell title="Form Doldur" active="forms">
