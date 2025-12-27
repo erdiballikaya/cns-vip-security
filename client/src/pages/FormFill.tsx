@@ -18,7 +18,7 @@ import {
   sendToOne,
   updateSubmission,
   type FormSubmissionDto,
-  generatePdf, // sende ayrı import ediyorsun; tek yerden olsun diye burada da bıraktım
+  //generatePdf, // sende ayrı import ediyorsun; tek yerden olsun diye burada da bıraktım
 } from "../api/formSubmissions";
 
 import { getSiteById, type SiteDto } from "../api/sites";
