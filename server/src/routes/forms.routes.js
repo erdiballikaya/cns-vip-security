@@ -3,6 +3,7 @@ const router = require("express").Router();
 const auth = require("../middlewares/auth");
 const permit = require("../middlewares/permit");
 const FormTemplate = require("../models/FormTemplate");
+const { renderPdf } = require("../services/pdf.service");
 
 // küçük yardımcılar
 function normalizeFieldsOrder(fields) {
@@ -10,6 +11,32 @@ function normalizeFieldsOrder(fields) {
 }
 function maxOrder(fields) {
   return Math.max(0, ...(fields || []).map((x) => (typeof x.order === "number" ? x.order : 0)));
+}
+
+function normalizePreviewTemplate(input) {
+  const data = input && typeof input === "object" ? input : {};
+  return {
+    name: String(data.name || "Form Önizleme").trim() || "Form Önizleme",
+    description: String(data.description || "").trim(),
+    fields: Array.isArray(data.fields) ? data.fields : [],
+    recipients: [],
+    pdfLayout: Array.isArray(data.pdfLayout) ? data.pdfLayout : [],
+    pdfLayoutMode: typeof data.pdfLayoutMode === "string" ? data.pdfLayoutMode : "1x1",
+    pdfLayoutSlots: data.pdfLayoutSlots && typeof data.pdfLayoutSlots === "object" ? data.pdfLayoutSlots : {},
+    pdfLayoutRatios: data.pdfLayoutRatios && typeof data.pdfLayoutRatios === "object" ? data.pdfLayoutRatios : {},
+    pdfGrid: data.pdfGrid && typeof data.pdfGrid === "object" ? data.pdfGrid : undefined,
+  };
+}
+
+function normalizePreviewSite(input) {
+  const data = input && typeof input === "object" ? input : {};
+  return {
+    name: String(data.name || "Önizleme Sitesi").trim() || "Önizleme Sitesi",
+    address: String(data.address || "").trim(),
+    logoUrl: String(data.logoUrl || "").trim(),
+    dynamic: data.dynamic && typeof data.dynamic === "object" ? data.dynamic : {},
+    personnel: Array.isArray(data.personnel) ? data.personnel : [],
+  };
 }
 
 // ✅ Form oluştur
@@ -34,11 +61,53 @@ router.post("/", auth, permit("forms.builder"), async (req, res) => {
   }
 });
 
+// ✅ Kaydetmeden PDF önizleme (inline)
+router.post("/preview-pdf", auth, permit("forms.builder"), async (req, res) => {
+  try {
+    const template = normalizePreviewTemplate(req.body?.template);
+    const site = normalizePreviewSite(req.body?.site);
+    const values = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
+
+    const submission = {
+      _id: "preview",
+      values,
+      status: "DRAFT",
+    };
+
+    const { pdfBuffer } = await renderPdf(
+      req,
+      { template, site, submission },
+      { output: "buffer" }
+    );
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="form-preview.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    return res.send(pdfBuffer);
+  } catch (e) {
+    console.error("POST /forms/preview-pdf error", e);
+    return res.status(500).json({ message: "PDF önizleme üretilemedi." });
+  }
+});
+
 
 // ✅ Alan ekle (order artık UI’dan gelmez)
 router.post("/:id/fields", auth, permit("forms.builder"), async (req, res) => {
   const { id } = req.params;
-  const { key, label, type, required, min, max, options, defaultValue } = req.body || {};
+  const {
+    key,
+    label,
+    type,
+    required,
+    min,
+    max,
+    options,
+    defaultValue,
+    columns,
+    rows,
+    columnMode,
+    cellType,
+  } = req.body || {};
 
   const k = String(key || "").trim();
   if (!k) return res.status(400).json({ message: "Alan key zorunlu." });
@@ -62,6 +131,10 @@ router.post("/:id/fields", auth, permit("forms.builder"), async (req, res) => {
     max: max ?? undefined,
     options: Array.isArray(options) ? options : [],
     defaultValue: defaultValue ?? undefined,
+    columnMode: typeof columnMode === "string" ? columnMode : undefined,
+    cellType: typeof cellType === "string" ? cellType : undefined,
+    columns: Array.isArray(columns) ? columns : undefined,
+    rows: Array.isArray(rows) ? rows : undefined,
   };
 
   // atomic update → version çakışması daha az
@@ -93,6 +166,11 @@ router.patch("/:id",  auth, permit("forms.builder"), async (req, res) => {
 
   if (req.body.name !== undefined) doc.name = req.body.name;
   if (req.body.description !== undefined) doc.description = req.body.description;
+  if (Array.isArray(req.body.pdfLayout)) doc.pdfLayout = req.body.pdfLayout;
+  if (typeof req.body.pdfLayoutMode === "string") doc.pdfLayoutMode = req.body.pdfLayoutMode;
+  if (req.body.pdfLayoutSlots && typeof req.body.pdfLayoutSlots === "object") doc.pdfLayoutSlots = req.body.pdfLayoutSlots;
+  if (req.body.pdfLayoutRatios && typeof req.body.pdfLayoutRatios === "object") doc.pdfLayoutRatios = req.body.pdfLayoutRatios;
+  if (req.body.pdfGrid && typeof req.body.pdfGrid === "object") doc.pdfGrid = req.body.pdfGrid;
 
   await doc.save();
   res.json(doc);
@@ -156,6 +234,10 @@ router.patch("/:id/fields/:key", auth, permit("forms.builder"), async (req, res)
     "max",
     "options",
     "defaultValue",
+    "columns",
+    "rows",
+    "columnMode",
+    "cellType",
   ];
 
   for (const k of allowed) {

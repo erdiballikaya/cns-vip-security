@@ -13,10 +13,11 @@ const router = express.Router();
 // --- DİZİN YAPILANDIRMASI ---
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const IMAGES_DIR = path.join(UPLOADS_DIR, "images");
+const COMPANY_LOGO_DIR = path.join(UPLOADS_DIR, "company-logos");
 const PDF_DIR = path.join(UPLOADS_DIR, "pdfs");
 
 // Gerekli klasörlerin varlığından emin olalım
-[IMAGES_DIR, PDF_DIR].forEach((dir) => {
+[IMAGES_DIR, COMPANY_LOGO_DIR, PDF_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -31,6 +32,17 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+const logoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, COMPANY_LOGO_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "");
+    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
+    cb(null, name);
+  },
+});
+
+const uploadLogo = multer({ storage: logoStorage });
 
 // --- YARDIMCI FONKSİYONLAR ---
 async function safeCountFiles(dir, exts) {
@@ -75,6 +87,15 @@ async function safeDeleteFiles(dir, exts) {
 router.post("/image", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "Dosya bulunamadı." });
   return res.json({ url: `/uploads/images/${req.file.filename}` });
+});
+
+/**
+ * 1b) Logo Yükleme
+ * POST /api/upload/logo
+ */
+router.post("/logo", uploadLogo.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "Dosya bulunamadı." });
+  return res.json({ url: `/uploads/company-logos/${req.file.filename}` });
 });
 
 /**

@@ -6,8 +6,16 @@ import Alert from "../ui/Alert";
 import EmptyState from "../ui/EmptyState";
 import { TwoCol, Stack } from "../ui/Grid";
 import { http } from "../api/http";
+import { uploadCompanyLogo } from "../api/uploads";
 import { useAuth } from "../auth/AuthContext";
 import { can } from "../auth/permissions";
+
+function absUrl(maybeRelative: string) {
+  if (!maybeRelative) return "";
+  if (maybeRelative.startsWith("http")) return maybeRelative;
+  const base = (import.meta.env.VITE_API_URL as string) || "";
+  return `${base}${maybeRelative.startsWith("/") ? "" : "/"}${maybeRelative}`;
+}
 
 export default function SiteCreate() {
   const { me } = useAuth();
@@ -16,6 +24,8 @@ export default function SiteCreate() {
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const [dynamic, setDynamic] = useState<Record<string, any>>({});
 
@@ -86,6 +96,7 @@ export default function SiteCreate() {
       const res = await http.post("/sites", {
         name: name.trim(),
         address: address.trim(),
+        logoUrl,
         dynamic,
       });
 
@@ -93,6 +104,7 @@ export default function SiteCreate() {
 
       setName("");
       setAddress("");
+      setLogoUrl("");
       setDynamic({});
       setAdding(false);
       setNewKey("");
@@ -101,6 +113,24 @@ export default function SiteCreate() {
       setNotice({ type: "err", title: "Hata", msg: e?.response?.data?.message ?? "Kayıt sırasında hata oluştu." });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onLogoPick = async (file: File | null) => {
+    if (!file) return;
+    if (!canEdit) {
+      setNotice({ type: "err", title: "Erişim Engellendi", msg: "Bu işlem için yetkin yok: Site Düzenleme" });
+      return;
+    }
+    try {
+      setLogoUploading(true);
+      const url = await uploadCompanyLogo(file);
+      setLogoUrl(url);
+      setNotice({ type: "ok", title: "Logo yüklendi", msg: "Logo başarıyla yüklendi." });
+    } catch (e: any) {
+      setNotice({ type: "err", title: "Hata", msg: e?.response?.data?.message ?? "Logo yüklenemedi." });
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -128,6 +158,45 @@ export default function SiteCreate() {
                   <div>
                     <div className="formLabel">Adres</div>
                     <input className="ctrl" value={address} onChange={(e) => setAddress(e.target.value)} />
+                  </div>
+
+                  <div>
+                    <div className="formLabel">Logo</div>
+                    {logoUrl ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <img
+                          src={absUrl(logoUrl)}
+                          alt="Site logo"
+                          style={{ maxHeight: 80, objectFit: "contain", borderRadius: 8, border: "1px solid #1f2937" }}
+                        />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <label className="btn" style={{ padding: "6px 10px" }}>
+                            Değiştir
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              disabled={logoUploading || busy}
+                              onChange={(e) => onLogoPick(e.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          <button className="btn" disabled={logoUploading || busy} onClick={() => setLogoUrl("")}>
+                            Kaldır
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="btn" style={{ padding: "6px 10px", width: "fit-content" }}>
+                        Logo Yükle
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          disabled={logoUploading || busy}
+                          onChange={(e) => onLogoPick(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                    )}
                   </div>
 
                   {notice ? <Alert type={notice.type} title={notice.title} message={notice.msg} /> : null}

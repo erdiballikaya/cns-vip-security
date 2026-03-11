@@ -5,13 +5,14 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  size?: "md" | "lg";
 }
 
-export default function Modal({ title, onClose, children }: ModalProps) {
+export default function Modal({ title, onClose, children, size = "md" }: ModalProps) {
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
       <div 
-        className="modal-container" 
+        className={`modal-container modal-${size}`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="modal-header">

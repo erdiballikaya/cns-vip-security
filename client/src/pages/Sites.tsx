@@ -46,7 +46,6 @@ export default function Sites() {
           right={
             <input
               className="ctrl"
-              style={{ width: 280 }}
               placeholder="Ara: site adı / adres"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -81,7 +80,8 @@ export default function Sites() {
                   </div>
 
                   <div className="siteMeta">
-                    {new Date(s.createdAt).toLocaleDateString("tr-TR")}
+                    <div>{new Date(s.createdAt).toLocaleDateString("tr-TR")}</div>
+                    <div className="hint">Personel: {(s.personnel || []).length}</div>
                   </div>
                 </div>
               ))}

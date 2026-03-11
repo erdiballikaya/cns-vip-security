@@ -1,6 +1,6 @@
 import { http } from "./http";
 
-export type FieldType = "text" | "number" | "boolean" | "select" | "image" | "matrix";
+export type FieldType = "text" | "number" | "boolean" | "select" | "image" | "matrix" | "date";
 
 export type FormField = {
   key: string; label: string; type: FieldType;
@@ -8,6 +8,10 @@ export type FormField = {
   min?: number; max?: number;
   options?: { label: string; value: string }[];
   defaultValue?: any;
+  columnMode?: "manual" | "personnel";
+  cellType?: "boolean" | "text";
+  columns?: { key: string; label: string; subLabel?: string; cellType?: "boolean" | "text" }[];
+  rows?: { key: string; label: string }[];
 };
 
 export type FormTemplateDto = {
@@ -16,6 +20,17 @@ export type FormTemplateDto = {
   description?: string;
   fields: FormField[];
   recipients: { email: string }[];
+  pdfLayout?: string[]; // legacy
+  pdfLayoutMode?: "1x1" | "1x2" | "2x1" | "2x2";
+  pdfLayoutSlots?: Record<string, string[]>;
+  pdfLayoutRatios?: { rows?: [number, number]; cols?: [number, number] };
+  pdfGrid?: {
+    rows: number;
+    cols: number;
+    cells: Record<string, string>;
+    rowRatios: number[];
+    colRatios: number[];
+  };
   createdAt?: string;
 };
 
@@ -34,7 +49,15 @@ export async function getForm(id: string) {
   return res.data;
 }
 
-export async function updateForm(id: string, patch: Partial<Pick<FormTemplateDto, "name" | "description">>) {
+export async function updateForm(
+  id: string,
+  patch: Partial<
+    Pick<
+      FormTemplateDto,
+      "name" | "description" | "pdfLayout" | "pdfLayoutMode" | "pdfLayoutSlots" | "pdfLayoutRatios" | "pdfGrid"
+    >
+  >
+) {
   const res = await http.patch<FormTemplateDto>(`/forms/${id}`, patch);
   return res.data;
 }

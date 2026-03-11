@@ -242,7 +242,6 @@ export default function Users() {
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <input
               className="ctrl"
-              style={{ width: 280 }}
               placeholder="Ara: email"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -307,7 +306,7 @@ export default function Users() {
           </Card>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 12 }}>
+        <div className="splitGrid">
           <Card title="Kullanıcı Listesi" subtitle={`${filtered.length} kullanıcı`}>
             {loading ? (
               <div className="hint">Yükleniyor...</div>

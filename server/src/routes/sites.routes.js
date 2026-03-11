@@ -18,7 +18,7 @@ router.get("/:id", auth, permit("sites.view"), async (req, res) => {
 
 // create
 router.post("/", auth, permit("sites.create"), async (req, res) => {
-  const { name, address, dynamic } = req.body || {};
+  const { name, address, dynamic, logoUrl } = req.body || {};
   if (!String(name || "").trim()) {
     return res.status(400).json({ message: "Site adı zorunlu." });
   }
@@ -27,6 +27,7 @@ router.post("/", auth, permit("sites.create"), async (req, res) => {
     name: String(name).trim(),
     address: String(address || "").trim(),
     dynamic: dynamic ?? {},
+    logoUrl: String(logoUrl || "").trim(),
     createdBy: req.user?.id,
   });
 

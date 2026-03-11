@@ -39,14 +39,50 @@ function shortErr(s: string, max = 80) {
   return t.slice(0, max) + "…";
 }
 
+function buildPersonnelColumns(list: any[]) {
+  return (list || []).map((p, idx) => ({
+    key: `p${idx}`,
+    label: String(p?.name || `Personel ${idx + 1}`),
+    subLabel: p?.role ? String(p.role) : undefined,
+  }));
+}
+
+function slugPersonnelKey(raw: string) {
+  const base = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+  return base || "personel";
+}
+
+function uniqByKey(cols: any[]) {
+  const map = new Map<string, any>();
+  for (const c of cols || []) {
+    const key = String(c?.key || "").trim();
+    if (!key) continue;
+    map.set(key, c);
+  }
+  return Array.from(map.values());
+}
+
 // matrix helpers
-function hasAnyCheckedMatrixValue(mv: any) {
+function hasAnyCheckedMatrixValue(mv: any, cellType: "boolean" | "text" | "mixed") {
   if (!mv || typeof mv !== "object") return false;
   for (const rk of Object.keys(mv)) {
+    if (rk === "_cols" || rk === "_colsSet") continue;
     const row = mv[rk];
     if (!row || typeof row !== "object") continue;
     for (const ck of Object.keys(row)) {
-      if (row[ck]) return true;
+      const v = row[ck];
+      if (cellType === "text") {
+        if (String(v ?? "").trim()) return true;
+      } else if (cellType === "boolean") {
+        if (v === true || v === false) return true;
+      } else {
+        if (v === true || v === false) return true;
+        if (String(v ?? "").trim()) return true;
+      }
     }
   }
   return false;
@@ -78,6 +114,7 @@ export default function FormFill() {
   // manual send
   const recipients = useMemo(() => (tpl?.recipients || []).map((r) => r.email), [tpl]);
   const [manualTo, setManualTo] = useState("");
+  const [manualPersonnelDrafts, setManualPersonnelDrafts] = useState<Record<string, { name: string; role: string }>>({});
   const [manualConfirmOpen, setManualConfirmOpen] = useState(false);
 
   // mail log details toggle
@@ -115,12 +152,25 @@ export default function FormFill() {
       }
 
       if (f.type === "matrix") {
-        // required matrix: en az 1 hücre seçili
-        if (!hasAnyCheckedMatrixValue(v)) return true;
+        const hasTextCol = (f.columns || []).some((c: any) => c?.cellType === "text");
+        const cellType =
+          f.columnMode === "manual"
+            ? (hasTextCol ? "mixed" : f.cellType === "text" ? "text" : "boolean")
+            : "boolean";
+        // required matrix: en az 1 hücre dolu
+        if (!hasAnyCheckedMatrixValue(v, cellType)) return true;
         continue;
       }
 
       // text/select/image gibi
+      if (f.type === "image") {
+        if (Array.isArray(v)) {
+          if (v.filter((x) => String(x || "").trim()).length === 0) return true;
+        } else if (!String(v ?? "").trim()) {
+          return true;
+        }
+        continue;
+      }
       if (!String(v ?? "").trim()) return true;
     }
 
@@ -159,13 +209,20 @@ export default function FormFill() {
   const setField = (key: string, v: any) => setValues((p) => ({ ...(p || {}), [key]: v }));
 
   // ✅ matrix value shape:
-  // values[fieldKey] = { [rowKey]: { [colKey]: true/false } }
+  // values[fieldKey] = {
+  //   _cols?: { key: string; label: string; subLabel?: string }[],
+  //   _colsSet?: boolean,
+  //   [rowKey]: { [colKey]: boolean | string | null }
+  // }
   const getMatrixCell = (fieldKey: string, rowKey: string, colKey: string) => {
     const mv = values?.[fieldKey];
-    return Boolean(mv?.[rowKey]?.[colKey]);
+    const v = mv?.[rowKey]?.[colKey];
+    if (v === true || v === false) return v;
+    if (typeof v === "string") return v;
+    return "";
   };
 
-  const setMatrixCell = (fieldKey: string, rowKey: string, colKey: string, checked: boolean) => {
+  const setMatrixCell = (fieldKey: string, rowKey: string, colKey: string, value: boolean | string | null) => {
     setValues((prev) => {
       const p = prev || {};
       const mv = p[fieldKey] && typeof p[fieldKey] === "object" ? p[fieldKey] : {};
@@ -177,15 +234,86 @@ export default function FormFill() {
           ...mv,
           [rowKey]: {
             ...row,
-            [colKey]: checked,
+            [colKey]: value,
           },
         },
       };
     });
   };
 
+  const setMatrixCols = (fieldKey: string, cols: any[]) => {
+    setValues((prev) => {
+      const p = prev || {};
+      const mv = p[fieldKey] && typeof p[fieldKey] === "object" ? p[fieldKey] : {};
+      const next: any = { ...mv, _cols: cols, _colsSet: true };
+
+      // prune removed columns from existing rows
+      const colKeys = new Set(cols.map((c: any) => c.key));
+      Object.keys(next).forEach((rk) => {
+        if (rk === "_cols" || rk === "_colsSet") return;
+        const row = next[rk];
+        if (!row || typeof row !== "object") return;
+        const pruned: any = {};
+        Object.keys(row).forEach((ck) => {
+          if (colKeys.has(ck)) pruned[ck] = row[ck];
+        });
+        next[rk] = pruned;
+      });
+
+      return { ...p, [fieldKey]: next };
+    });
+  };
+
   const clearMatrix = (fieldKey: string) => {
-    setValues((p) => ({ ...(p || {}), [fieldKey]: {} }));
+    setValues((p) => {
+      const prev = p || {};
+      const mv = prev[fieldKey] && typeof prev[fieldKey] === "object" ? prev[fieldKey] : {};
+      return { ...prev, [fieldKey]: { _cols: mv._cols || [], _colsSet: mv._colsSet || false } };
+    });
+  };
+
+  const setManualPersonnelDraft = (fieldKey: string, patch: Partial<{ name: string; role: string }>) => {
+    setManualPersonnelDrafts((prev) => {
+      const cur = prev[fieldKey] || { name: "", role: "" };
+      return {
+        ...prev,
+        [fieldKey]: {
+          ...cur,
+          ...patch,
+        },
+      };
+    });
+  };
+
+  const addManualPersonnelColumn = (fieldKey: string, currentCols: any[]) => {
+    const draft = manualPersonnelDrafts[fieldKey] || { name: "", role: "" };
+    const label = String(draft.name || "").trim();
+    if (!label) {
+      toast.error("Personel adı boş olamaz", "Eksik Bilgi");
+      return;
+    }
+
+    const role = String(draft.role || "").trim();
+    const existingKeys = new Set((currentCols || []).map((c: any) => String(c?.key || "")));
+    const base = `m_${slugPersonnelKey(label)}`;
+    let key = base;
+    let i = 2;
+    while (existingKeys.has(key)) {
+      key = `${base}_${i}`;
+      i += 1;
+    }
+
+    const next = uniqByKey([
+      ...(currentCols || []),
+      {
+        key,
+        label,
+        subLabel: role || undefined,
+      },
+    ]);
+
+    setMatrixCols(fieldKey, next);
+    setManualPersonnelDrafts((prev) => ({ ...prev, [fieldKey]: { name: "", role: "" } }));
   };
 
   const saveDraft = async () => {
@@ -286,6 +414,33 @@ export default function FormFill() {
     }
   };
 
+  const uploadForFieldMultiple = async (fieldKey: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadingKey(fieldKey);
+    try {
+      const urls: string[] = [];
+      for (const file of Array.from(files)) {
+        const res = await uploadImage(file);
+        const url = typeof res === "string" ? res : (res as any)?.url ?? (res as any)?.path ?? "";
+        if (url) urls.push(url);
+      }
+      if (!urls.length) throw new Error("Upload response url boş");
+
+      setValues((prev) => {
+        const p = prev || {};
+        const cur = p[fieldKey];
+        const arr = Array.isArray(cur) ? cur : cur ? [cur] : [];
+        return { ...p, [fieldKey]: [...arr, ...urls] };
+      });
+
+      toast.success("Resimler yüklendi", "Başarılı");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? e?.message ?? "Resim yüklenemedi", "Hata");
+    } finally {
+      setUploadingKey(null);
+    }
+  };
+
   const renderField = (f: any) => {
     const v = values?.[f.key];
 
@@ -369,9 +524,70 @@ export default function FormFill() {
       );
     }
 
+    if (f.type === "date") {
+      return (
+        <div key={f.key} className="fieldRow">
+          <div className="fieldRowTop">
+            <div className="fieldRowTitle">
+              {f.label}
+              {f.required ? <span className="fieldRowReq"> *</span> : null}
+              <span className="fieldRowKey">{f.key}</span>
+            </div>
+          </div>
+
+          <input
+            className="ctrl"
+            type="date"
+            value={v ?? ""}
+            onChange={(e) => setField(f.key, e.target.value)}
+            disabled={saving}
+          />
+        </div>
+      );
+    }
+
     if (f.type === "matrix") {
-      const cols = (f.columns || []) as any[];
+      const columnMode = f.columnMode === "personnel" ? "personnel" : "manual";
       const rows = (f.rows || []) as any[];
+      const allPersonnel = uniqByKey(buildPersonnelColumns(site?.personnel || []));
+      const mv = values?.[f.key] || {};
+      const storedCols = (mv._cols || []) as any[];
+      const hasColsSet = mv._colsSet === true;
+      const cols =
+        columnMode === "manual"
+          ? ((f.columns || []) as any[])
+          : (hasColsSet ? uniqByKey(storedCols) : allPersonnel);
+      const selectablePersonnel =
+        columnMode === "personnel"
+          ? uniqByKey([...(storedCols || []), ...allPersonnel])
+          : [];
+      const manualDraft = manualPersonnelDrafts[f.key] || { name: "", role: "" };
+
+      const hasTextCol = columnMode === "manual" ? cols.some((c: any) => c?.cellType === "text") : false;
+      const hasBoolCol = columnMode === "manual" ? cols.some((c: any) => !c?.cellType || c?.cellType === "boolean") : true;
+      const cellType = hasTextCol && hasBoolCol ? "mixed" : hasTextCol ? "text" : "boolean";
+
+      const missingRows = !rows.length;
+      const missingCols = columnMode === "manual" ? !cols.length : false;
+
+      if (missingRows || missingCols) {
+        return (
+          <div key={f.key} className="fieldRow">
+            <div className="fieldRowTop">
+              <div className="fieldRowTitle">
+                {f.label}
+                {f.required ? <span className="fieldRowReq"> *</span> : null}
+                <span className="fieldRowKey">{f.key}</span>
+              </div>
+            </div>
+            <div className="hint">
+              Matrix tanımı eksik. Form Yönetimi &gt; Alan Ekle içinde satırları ve sütun kaynağını kaydet.
+            </div>
+          </div>
+        );
+      }
+
+      const selectedKeys = new Set(cols.map((c: any) => c.key));
 
       return (
         <div key={f.key} className="fieldRow">
@@ -392,6 +608,101 @@ export default function FormFill() {
               Temizle
             </button>
           </div>
+
+          {columnMode === "personnel" ? (
+            <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+              <div className="hint">Sütun personel seçimi</div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  className="btn"
+                  type="button"
+                  style={{ padding: "4px 8px", opacity: 0.85 }}
+                  disabled={saving || selectablePersonnel.length === 0}
+                  onClick={() => setMatrixCols(f.key, selectablePersonnel)}
+                >
+                  Tümünü seç
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  style={{ padding: "4px 8px", opacity: 0.85 }}
+                  disabled={saving || cols.length === 0}
+                  onClick={() => setMatrixCols(f.key, [])}
+                >
+                  Tümünü kaldır
+                </button>
+              </div>
+
+              {selectablePersonnel.length === 0 ? (
+                <div className="hint">Henüz seçilebilir personel yok. Manuel ekleyebilirsin.</div>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {selectablePersonnel.map((p: any) => {
+                    const checked = selectedKeys.has(p.key);
+                    return (
+                      <label key={p.key} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={saving}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? uniqByKey([...(cols || []), p])
+                              : cols.filter((c: any) => c.key !== p.key);
+                            setMatrixCols(f.key, next);
+                          }}
+                        />
+                        <span>
+                          {p.label}
+                          {p.subLabel ? ` — ${p.subLabel}` : ""}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
+                <div className="hint">Manuel personel ekle (sadece bu kullanım için)</div>
+                <input
+                  className="ctrl"
+                  placeholder="Ad Soyad"
+                  value={manualDraft.name}
+                  disabled={saving}
+                  onChange={(e) => setManualPersonnelDraft(f.key, { name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addManualPersonnelColumn(f.key, cols);
+                    }
+                  }}
+                />
+                <input
+                  className="ctrl"
+                  placeholder="Görev (opsiyonel)"
+                  value={manualDraft.role}
+                  disabled={saving}
+                  onChange={(e) => setManualPersonnelDraft(f.key, { role: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addManualPersonnelColumn(f.key, cols);
+                    }
+                  }}
+                />
+                <button
+                  className="btn"
+                  type="button"
+                  style={{ width: "fit-content" }}
+                  disabled={saving || !manualDraft.name.trim()}
+                  onClick={() => addManualPersonnelColumn(f.key, cols)}
+                >
+                  Personel Ekle
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div
             style={{
@@ -442,18 +753,40 @@ export default function FormFill() {
                     <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,.06)" }}>{r.label}</td>
 
                     {cols.map((c) => {
-                      const checked = getMatrixCell(f.key, r.key, c.key);
+                      const cell = getMatrixCell(f.key, r.key, c.key);
+                      const colCellType =
+                        columnMode === "manual"
+                          ? (c.cellType === "text" ? "text" : f.cellType === "text" ? "text" : "boolean")
+                          : "boolean";
                       return (
                         <td
                           key={`${r.key}-${c.key}`}
                           style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,.06)", textAlign: "center" }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={saving}
-                            onChange={(e) => setMatrixCell(f.key, r.key, c.key, e.target.checked)}
-                          />
+                          {colCellType === "text" ? (
+                            <input
+                              className="ctrl"
+                              value={cell ?? ""}
+                              disabled={saving}
+                              onChange={(e) => setMatrixCell(f.key, r.key, c.key, e.target.value)}
+                              style={{ minWidth: 140 }}
+                            />
+                          ) : (
+                            <select
+                              className="ctrl"
+                              value={cell === true ? "yes" : cell === false ? "no" : ""}
+                              disabled={saving}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMatrixCell(f.key, r.key, c.key, val === "" ? null : val === "yes");
+                              }}
+                              style={{ minWidth: 90 }}
+                            >
+                              <option value="">-</option>
+                              <option value="yes">Evet</option>
+                              <option value="no">Hayır</option>
+                            </select>
+                          )}
                         </td>
                       );
                     })}
@@ -464,15 +797,19 @@ export default function FormFill() {
           </div>
 
           <div className="hint" style={{ marginTop: 8 }}>
-            İpucu: Her satır için personelleri işaretleyebilirsin.
+            {cellType === "text"
+              ? "İpucu: Her satır için personel/sütunlara metin girebilirsin."
+              : cellType === "mixed"
+                ? "İpucu: Bazı sütunlar metin, bazıları Evet/Hayır olabilir."
+                : "İpucu: Her satır için personelleri işaretleyebilirsin."}
           </div>
         </div>
       );
     }
 
-    // image
-    const url = String(v || "");
-    const abs = absUrl(url);
+    // image (single or multiple)
+    const urls = Array.isArray(v) ? v : v ? [v] : [];
+    const absList = urls.map((u) => absUrl(String(u || ""))).filter(Boolean);
 
     return (
       <div key={f.key} className="fieldRow">
@@ -483,7 +820,7 @@ export default function FormFill() {
             <span className="fieldRowKey">{f.key}</span>
           </div>
 
-          {url ? (
+          {absList.length ? (
             <button className="btn" style={{ padding: "6px 10px" }} disabled={saving} onClick={() => setField(f.key, "")}>
               Kaldır
             </button>
@@ -496,29 +833,55 @@ export default function FormFill() {
           <input
             type="file"
             accept="image/*"
+            multiple
             disabled={saving || uploadingKey === f.key}
             onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              await uploadForField(f.key, file);
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              if (files.length === 1) {
+                await uploadForField(f.key, files[0]);
+              } else {
+                await uploadForFieldMultiple(f.key, files);
+              }
               if (e.currentTarget) e.currentTarget.value = "";
             }}
           />
 
           {uploadingKey === f.key ? <div className="hint">Yükleniyor...</div> : null}
 
-          {url ? (
+          {absList.length ? (
             <div className="imagePreview" style={{ display: "grid", gap: 8 }}>
-              <img
-                src={abs}
-                alt={f.label}
-                style={{
-                  width: "100%",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,.08)",
-                }}
-              />
-              <div className="hint">Fotoğraf yüklü ✅</div>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                {absList.map((src, idx) => (
+                  <div key={`${f.key}-${idx}`} style={{ display: "grid", gap: 6 }}>
+                    <img
+                      src={src}
+                      alt={`${f.label} ${idx + 1}`}
+                      style={{
+                        width: "100%",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,.08)",
+                      }}
+                    />
+                    <button
+                      className="btn"
+                      style={{ padding: "6px 10px" }}
+                      disabled={saving}
+                      onClick={() => {
+                        setValues((prev) => {
+                          const p = prev || {};
+                          const cur = Array.isArray(p[f.key]) ? p[f.key] : p[f.key] ? [p[f.key]] : [];
+                          const next = cur.filter((_: any, i: number) => i !== idx);
+                          return { ...p, [f.key]: next };
+                        });
+                      }}
+                    >
+                      Kaldır
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="hint">Fotoğraflar yüklü ✅</div>
             </div>
           ) : (
             <div className="hint">Henüz fotoğraf seçilmedi.</div>
@@ -542,7 +905,12 @@ export default function FormFill() {
 
   if (!sub || !tpl || !site) return <Navigate to="/forms" replace />;
 
-  const submissionImageCount = sortedFields.filter((f: any) => f.type === "image" && String(values?.[f.key] || "")).length;
+  const submissionImageCount = sortedFields.reduce((sum: number, f: any) => {
+    if (f.type !== "image") return sum;
+    const v = values?.[f.key];
+    if (Array.isArray(v)) return sum + v.filter((x) => String(x || "").trim()).length;
+    return String(v || "").trim() ? sum + 1 : sum;
+  }, 0);
 
   // PDF butonu (istersen aç)
   // const generatePdfOnly = async () => {
@@ -604,7 +972,7 @@ export default function FormFill() {
           </div>
         }
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1.25fr .75fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
           <Card title="Form" subtitle={`Durum: ${sub.status} · Fotoğraf: ${submissionImageCount}`}>
             {sortedFields.length === 0 ? (
               <EmptyState title="Alan yok" description="Bu form şablonunda alan tanımı yok." />

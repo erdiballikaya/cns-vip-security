@@ -122,7 +122,20 @@ function SortableFieldRow({
       </div>
 
       <div className="hint">
-        Tip: <b>{f.type === "select" ? "Çoktan Seçmeli" : f.type === "image" ? "Resim" : f.type === "number" ? "Sayı" : "Metin"}</b>
+        Tip:{" "}
+        <b>
+          {f.type === "select"
+            ? "Çoktan Seçmeli"
+            : f.type === "image"
+              ? "Resim"
+              : f.type === "number"
+                ? "Sayı"
+                : f.type === "matrix"
+                  ? "Matrix"
+                  : f.type === "date"
+                    ? "Tarih"
+                  : "Metin"}
+        </b>
         {f.type === "select" ? ` · seçenek: ${(f.options || []).length}` : ""}
         {typeof f.order === "number" ? ` · sıra: ${f.order}` : ""}
       </div>
@@ -165,6 +178,7 @@ export default function FormDetail() {
 
   // ✅ NEW: tümünü sil confirm
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   // ✅ drag UI list (animasyon için ayrı state)
   const [fieldsUi, setFieldsUi] = useState<any[]>([]);
@@ -283,6 +297,7 @@ export default function FormDetail() {
     }
   };
 
+
   const handleDeleteField = async () => {
     if (!tpl || !fieldToDelete) return;
     if (!canBuild) return;
@@ -395,6 +410,68 @@ export default function FormDetail() {
     }
   };
 
+  const openPreview = async () => {
+    if (!tpl || loading) return;
+    if (!canUse) return toast.error("Bu işlem için yetkin yok: Form Doldurma", "Erişim Engellendi");
+
+    const normalizedFields = normalizeOrders1N([...(fieldsUi || [])]).map((f: any) => ({
+      key: f.key,
+      label: f.label,
+      type: f.type,
+      required: Boolean(f.required),
+      order: f.order,
+      min: f.min,
+      max: f.max,
+      options: Array.isArray(f.options) ? f.options : [],
+      defaultValue: f.defaultValue,
+      columnMode: f.columnMode,
+      cellType: f.cellType,
+      columns: Array.isArray(f.columns) ? f.columns : undefined,
+      rows: Array.isArray(f.rows) ? f.rows : undefined,
+    }));
+
+    const selectedSite = sites.find((s) => s._id === selectedSiteId) || sites[0];
+
+    const previewTemplate = {
+      name: editName.trim() || tpl.name || "Form",
+      description: editDesc.trim(),
+      fields: normalizedFields,
+      pdfLayout: tpl.pdfLayout || [],
+      pdfLayoutMode: tpl.pdfLayoutMode || "1x1",
+      pdfLayoutSlots: tpl.pdfLayoutSlots || {},
+      pdfLayoutRatios: tpl.pdfLayoutRatios || {},
+      pdfGrid: tpl.pdfGrid,
+    };
+
+    const previewSite = {
+      name: selectedSite?.name || "Önizleme Sitesi",
+      address: selectedSite?.address || "",
+      logoUrl: "",
+      dynamic: {},
+      personnel: [],
+    };
+
+    try {
+      setPreviewing(true);
+      const res = await http.post("/forms/preview-pdf", {
+        template: previewTemplate,
+        site: previewSite,
+        values: {},
+      }, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+      window.location.href = blobUrl;
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "PDF önizleme üretilemedi.", "Hata");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   // ✅ drag commit: UI anında + backend reorderFields
   const commitReorder = async (movedUi: any[]) => {
     if (!tpl || !canBuild) return;
@@ -458,6 +535,11 @@ export default function FormDetail() {
             <Link className="btn" to="/forms">
               ← Formlar
             </Link>
+            {canUse && (
+              <button className="btn" disabled={loading || previewing} onClick={openPreview}>
+                {previewing ? "Önizleniyor..." : "Önizle"}
+              </button>
+            )}
             {canBuild && (
               <button className="btn btnPrimary" disabled={saving || loading} onClick={saveMeta}>
                 {saving ? "Kaydediliyor..." : "Kaydet"}
@@ -481,7 +563,7 @@ export default function FormDetail() {
           <EmptyState title="Form bulunamadı" description="Form silinmiş olabilir veya erişimin yok." />
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1.2fr .8fr", gap: 12 }}>
+            <div className="formDetailGrid">
               <Card title="Form Bilgileri" subtitle={canBuild ? "Düzenleyebilirsin" : "Salt görüntüleme"}>
                 {loading ? (
                   <div className="hint">Yükleniyor...</div>
@@ -544,7 +626,7 @@ export default function FormDetail() {
 
             <div style={{ height: 12 }} />
 
-            <div style={{ display: "grid", gridTemplateColumns: "1.2fr .8fr", gap: 12 }}>
+            <div className="formDetailGrid">
               <Card
                 title="Alanlar"
                 subtitle={canBuild ? "Sürükle-bırak ile sırala (order otomatik 1..N)." : "Form alanları"}
@@ -593,7 +675,7 @@ export default function FormDetail() {
                           placeholder="email ekle (örn: a@b.com)"
                           value={newRecipient}
                           onChange={(e) => setNewRecipient(e.target.value)}
-                          style={{ flex: 1, minWidth: 220 }}
+                          style={{ flex: 1, minWidth: 0 }}
                           disabled={saving}
                         />
                         <button className="btn btnPrimary" disabled={saving} onClick={handleAddRecipient}>
@@ -751,6 +833,8 @@ export default function FormDetail() {
               onClose={() => setFieldModalOpen(false)}
               templateId={id}
               mode="add"
+              sites={sites.map((s) => ({ _id: s._id, name: s.name }))}
+              defaultSiteId={selectedSiteId}
               onCreated={async () => {
                 await refresh();
               }}
@@ -763,10 +847,13 @@ export default function FormDetail() {
               templateId={id}
               mode="edit"
               initialField={editField}
+              sites={sites.map((s) => ({ _id: s._id, name: s.name }))}
+              defaultSiteId={selectedSiteId}
               onCreated={async () => {
                 await refresh();
               }}
             />
+
 
             <ConfirmDialog
               open={Boolean(fieldToDelete)}

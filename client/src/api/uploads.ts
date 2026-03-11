@@ -17,6 +17,17 @@ export async function uploadImage(file: File) {
   return res.data.url; // "/uploads/<file>"
 }
 
+export async function uploadCompanyLogo(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  // ✅ server: POST /upload/logo
+  const res = await http.post<{ url: string }>("/upload/logo", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data.url;
+}
+
 export async function getImageCount() {
   // ✅ server: GET /upload/count
   const res = await http.get<{ count: number }>("/upload/count");

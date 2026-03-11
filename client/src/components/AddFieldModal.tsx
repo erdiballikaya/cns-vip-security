@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "../ui/Modal";
 import { useToast } from "./ToastProvider";
 import { http } from "../api/http";
-import type { FieldDto, FieldType, Option } from "../types/field";
+import type { FieldDto, FieldType, MatrixCellType, MatrixColumn, MatrixColumnMode, Option } from "../types/field";
 
 type Props =
   | {
@@ -12,6 +12,8 @@ type Props =
       mode: "add";
       onCreated: () => Promise<void> | void;
       initialField?: never;
+      sites?: { _id: string; name: string }[];
+      defaultSiteId?: string;
     }
   | {
       open: boolean;
@@ -20,9 +22,10 @@ type Props =
       mode: "edit";
       onCreated: () => Promise<void> | void;
       initialField: FieldDto | null;
+      sites?: { _id: string; name: string }[];
+      defaultSiteId?: string;
     };
 
-type MatrixColumn = { key: string; label: string; subLabel?: string };
 type MatrixRow = { key: string; label: string };
 
 function uniqCheck(items: { key: string }[]) {
@@ -38,13 +41,36 @@ function safeTrim(s: any) {
   return String(s ?? "").trim();
 }
 
+function nowLocalInputValue() {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function slugifyKey(raw: string, fallback: string) {
+  const base = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+  return base || fallback;
+}
+
+function dedupeKeys<T extends { key: string }>(items: T[]) {
+  const seen = new Map<string, number>();
+  return items.map((it) => {
+    const count = seen.get(it.key) || 0;
+    seen.set(it.key, count + 1);
+    if (count === 0) return it;
+    return { ...it, key: `${it.key}_${count + 1}` };
+  });
+}
+
 export default function AddFieldModal(props: Props) {
   const toast = useToast();
   const isEdit = props.mode === "edit";
 
   const [saving, setSaving] = useState(false);
 
-  const [key, setKey] = useState("");
   const [label, setLabel] = useState("");
   const [type, setType] = useState<FieldType>("text");
   const [required, setRequired] = useState(false);
@@ -55,9 +81,10 @@ export default function AddFieldModal(props: Props) {
 
   const [optionsText, setOptionsText] = useState(""); // select: "label:value" satır satır
 
-  // ✅ matrix text inputs
-  const [matrixColsText, setMatrixColsText] = useState("");
-  const [matrixRowsText, setMatrixRowsText] = useState("");
+  // ✅ matrix inputs
+  const [matrixColumnMode, setMatrixColumnMode] = useState<MatrixColumnMode>("manual");
+  const [matrixColumns, setMatrixColumns] = useState<MatrixColumn[]>([]);
+  const [matrixRows, setMatrixRows] = useState<MatrixRow[]>([]);
 
   // modal açıldığında (edit/add) state doldur
   useEffect(() => {
@@ -67,14 +94,13 @@ export default function AddFieldModal(props: Props) {
       const f = props.initialField;
       if (!f) return;
 
-      setKey(f.key ?? "");
       setLabel(f.label ?? "");
       setType((f.type as FieldType) ?? "text");
       setRequired(Boolean(f.required));
 
       setMin(typeof f.min === "number" ? f.min : "");
       setMax(typeof f.max === "number" ? f.max : "");
-      setDefaultValue(f.defaultValue ?? (f.type === "boolean" ? false : ""));
+      setDefaultValue(f.defaultValue ?? (f.type === "boolean" ? false : f.type === "date" ? nowLocalInputValue() : ""));
 
       const opts = (f.options || []).map((o) => `${o.label}:${o.value}`).join("\n");
       setOptionsText(opts);
@@ -83,21 +109,30 @@ export default function AddFieldModal(props: Props) {
       if (String(f.type) === "matrix") {
         const cols = (f as any)?.columns || [];
         const rows = (f as any)?.rows || [];
+        const mode = (f as any)?.columnMode || (cols?.length ? "manual" : "personnel");
 
-        setMatrixColsText(
-          cols
-            .map((c: any) => `${c.key}|${c.label}${c.subLabel ? `|${c.subLabel}` : ""}`)
-            .join("\n")
+        setMatrixColumnMode(mode);
+        setMatrixColumns(
+          (cols || []).map((c: any, idx: number) => ({
+            key: c.key || slugifyKey(c.label, `col_${idx + 1}`),
+            label: c.label || "",
+            subLabel: c.subLabel,
+            cellType: c.cellType || "boolean",
+          }))
         );
-
-        setMatrixRowsText(rows.map((r: any) => `${r.key}|${r.label}`).join("\n"));
+        setMatrixRows(
+          (rows || []).map((r: any, idx: number) => ({
+            key: r.key || slugifyKey(r.label, `row_${idx + 1}`),
+            label: r.label || "",
+          }))
+        );
       } else {
-        setMatrixColsText("");
-        setMatrixRowsText("");
+        setMatrixColumnMode("manual");
+        setMatrixColumns([]);
+        setMatrixRows([]);
       }
     } else {
       // add
-      setKey("");
       setLabel("");
       setType("text");
       setRequired(false);
@@ -105,8 +140,9 @@ export default function AddFieldModal(props: Props) {
       setMax("");
       setDefaultValue("");
       setOptionsText("");
-      setMatrixColsText("");
-      setMatrixRowsText("");
+      setMatrixColumnMode("manual");
+      setMatrixColumns([]);
+      setMatrixRows([]);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,8 +153,8 @@ export default function AddFieldModal(props: Props) {
     if (props.open) return;
     setSaving(false);
     setOptionsText("");
-    setMatrixColsText("");
-    setMatrixRowsText("");
+    setMatrixColumns([]);
+    setMatrixRows([]);
     // key/label vs kapatınca temizlemek istemiyorsan kaldırabilirsin
   }, [props.open]);
 
@@ -140,75 +176,52 @@ export default function AddFieldModal(props: Props) {
     return out;
   }, [optionsText, type]);
 
-  // ✅ matrix parse
-  const matrixColumns: MatrixColumn[] = useMemo(() => {
+  const matrixColumnsNormalized: MatrixColumn[] = useMemo(() => {
     if (type !== "matrix") return [];
-    return matrixColsText
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split("|").map((x) => (x ?? "").trim());
-        const k = parts[0];
-        const l = parts[1];
-        const s = parts[2];
-        if (!k || !l) return null;
-        return { key: k, label: l, subLabel: s ? s : undefined };
-      })
-      .filter(Boolean) as MatrixColumn[];
-  }, [matrixColsText, type]);
+    if (matrixColumnMode !== "manual") return [];
+    const cols = (matrixColumns || [])
+      .map((c, idx) => ({
+        key: slugifyKey(c.label, `col_${idx + 1}`),
+        label: String(c.label || "").trim(),
+        subLabel: c.subLabel,
+        cellType: c.cellType || "boolean",
+      }))
+      .filter((c) => c.label);
+    return dedupeKeys(cols);
+  }, [matrixColumns, matrixColumnMode, type]);
 
-  const matrixRows: MatrixRow[] = useMemo(() => {
+  const matrixRowsNormalized: MatrixRow[] = useMemo(() => {
     if (type !== "matrix") return [];
-    return matrixRowsText
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split("|").map((x) => (x ?? "").trim());
-        const k = parts[0];
-        const l = parts[1];
-        if (!k || !l) return null;
-        return { key: k, label: l };
-      })
-      .filter(Boolean) as MatrixRow[];
-  }, [matrixRowsText, type]);
+    const rows = (matrixRows || [])
+      .map((r, idx) => ({
+        key: slugifyKey(r.label, `row_${idx + 1}`),
+        label: String(r.label || "").trim(),
+      }))
+      .filter((r) => r.label);
+    return dedupeKeys(rows);
+  }, [matrixRows, type]);
 
   const submit = async () => {
     if (saving) return;
 
-    const k = safeTrim(key);
     const l = safeTrim(label);
 
-    if (!k) return toast.error("Benzersiz Alan İsmi zorunlu.", "Eksik Bilgi");
-    if (!isEdit && k.includes(".")) return toast.error("Benzersiz Alan İsmi '.' içeremez.", "Geçersiz");
     if (!l) return toast.error("Başlık zorunlu.", "Eksik Bilgi");
+    const k = isEdit ? safeTrim(props.initialField?.key) : slugifyKey(l, "field");
 
     // ✅ matrix validation
     if (type === "matrix") {
-      if (!matrixColumns.length) return toast.error("Matrix sütunları boş olamaz.", "Eksik Bilgi");
-      if (!matrixRows.length) return toast.error("Matrix satırları boş olamaz.", "Eksik Bilgi");
+      if (matrixColumnMode === "manual" && !matrixColumnsNormalized.length)
+        return toast.error("Matrix sütunları boş olamaz.", "Eksik Bilgi");
+      if (!matrixRowsNormalized.length) return toast.error("Matrix satırları boş olamaz.", "Eksik Bilgi");
 
-      const dupCol = uniqCheck(matrixColumns);
-      if (dupCol) return toast.error(`Matrix sütun key tekrar ediyor: ${dupCol}`, "Geçersiz");
+      if (matrixColumnMode === "manual") {
+        const dupCol = uniqCheck(matrixColumnsNormalized);
+        if (dupCol) return toast.error(`Matrix sütun key tekrar ediyor: ${dupCol}`, "Geçersiz");
+      }
 
-      const dupRow = uniqCheck(matrixRows);
+      const dupRow = uniqCheck(matrixRowsNormalized);
       if (dupRow) return toast.error(`Matrix satır key tekrar ediyor: ${dupRow}`, "Geçersiz");
-
-      // opsiyonel: satır/sütun formatını kullanıcıya daha net anlat
-      const colsRaw = matrixColsText
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean);
-      const badColLine = colsRaw.find((line) => line.split("|").filter(Boolean).length < 2);
-      if (badColLine) return toast.error(`Sütun formatı hatalı: "${badColLine}"`, "Geçersiz");
-
-      const rowsRaw = matrixRowsText
-        .split("\n")
-        .map((x) => x.trim())
-        .filter(Boolean);
-      const badRowLine = rowsRaw.find((line) => line.split("|").filter(Boolean).length < 2);
-      if (badRowLine) return toast.error(`Satır formatı hatalı: "${badRowLine}"`, "Geçersiz");
     }
 
     // ✅ payload (Yol A): matrix ise columns/rows gönder; diğer alanları temiz tut
@@ -228,11 +241,17 @@ export default function AddFieldModal(props: Props) {
     } else if (type === "select") {
       payload.options = options;
       payload.defaultValue = defaultValue === "" ? undefined : defaultValue;
-    } else if (type === "text" || type === "image") {
+    } else if (type === "text" || type === "image" || type === "date") {
       payload.defaultValue = defaultValue === "" ? undefined : defaultValue;
     } else if (type === "matrix") {
-      payload.columns = matrixColumns;
-      payload.rows = matrixRows;
+      const allTextCols =
+        matrixColumnMode === "manual" &&
+        matrixColumnsNormalized.length > 0 &&
+        matrixColumnsNormalized.every((c) => c.cellType === "text");
+      payload.columnMode = matrixColumnMode;
+      payload.cellType = matrixColumnMode === "personnel" ? "boolean" : allTextCols ? "text" : "boolean";
+      payload.columns = matrixColumnMode === "manual" ? matrixColumnsNormalized : undefined;
+      payload.rows = matrixRowsNormalized;
       // matrix’te default/min/max/options gönderme (backend’e temiz gitsin)
     }
 
@@ -271,14 +290,11 @@ export default function AddFieldModal(props: Props) {
 
         <div className="field">
           <div className="label">Benzersiz Alan İsmi</div>
-          <input
-            className="ctrl"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            disabled={saving || isEdit}
-            placeholder="örn: kameraSayisi"
-          />
-          {isEdit ? <div className="hint">Benzersiz Alan ismi değiştirilemez.</div> : null}
+          {isEdit ? (
+            <div className="hint">{props.initialField?.key || "-"}</div>
+          ) : (
+            <div className="hint">Otomatik oluşturulur: {slugifyKey(label, "field")}</div>
+          )}
         </div>
 
         <div className="field">
@@ -288,7 +304,8 @@ export default function AddFieldModal(props: Props) {
             <option value="number">Sayı</option>
             <option value="select">Çoktan Seçmeli</option>
             <option value="image">Resim</option>
-            {/* <option value="matrix">Matrix (Tablo)</option> */}
+            <option value="date">Tarih</option>
+            <option value="matrix">Matrix (Tablo)</option>
           </select>
         </div>
 
@@ -298,7 +315,7 @@ export default function AddFieldModal(props: Props) {
         </label>
 
         {type === "number" ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="numberGrid2">
             <div className="field">
               <div className="label">Min</div>
               <input
@@ -342,36 +359,126 @@ export default function AddFieldModal(props: Props) {
           <div className="field">
             <div className="label">Matrix Tanımı</div>
 
-            <div className="hint" style={{ marginBottom: 6 }}>
-              Sütunlar (her satır: key|label|altBaşlık)
+            <div className="field" style={{ marginTop: 8 }}>
+              <div className="label">Sütun Kaynağı</div>
+              <select
+                className="ctrl"
+                value={matrixColumnMode}
+                onChange={(e) => {
+                  const next = e.target.value as MatrixColumnMode;
+                  setMatrixColumnMode(next);
+                }}
+                disabled={saving}
+              >
+                <option value="manual">Manuel</option>
+                <option value="personnel">Personel</option>
+              </select>
+              <div className="hint" style={{ marginTop: 6 }}>
+                {matrixColumnMode === "manual"
+                  ? "Sütunları manuel girersin."
+                  : "Sütunlar form doldurma ekranında personel seçilerek oluşur."}
+              </div>
             </div>
-            <textarea
-              className="ctrl"
-              rows={4}
-              value={matrixColsText}
-              onChange={(e) => setMatrixColsText(e.target.value)}
-              disabled={saving}
-              placeholder={
-                "Örn:\nbaris|Barış Sarıcan|Güvenlik Görevlisi\ncaner|Caner Tascı|Güvenlik Görevlisi\nmehmet|Mehmetcan Ateş|Başvuran"
-              }
-            />
+
+            {matrixColumnMode === "manual" ? (
+              <>
+                <div className="hint" style={{ marginTop: 10, marginBottom: 6 }}>
+                  Sütunlar
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {(matrixColumns || []).map((c, idx) => (
+                    <div key={`col-${idx}`} className="matrixColumnRow">
+                      <input
+                        className="ctrl"
+                        placeholder={`Sütun ${idx + 1} adı`}
+                        value={c.label || ""}
+                        onChange={(e) => {
+                          const next = [...matrixColumns];
+                          next[idx] = { ...next[idx], label: e.target.value };
+                          setMatrixColumns(next);
+                        }}
+                        disabled={saving}
+                      />
+                      <select
+                        className="ctrl"
+                        value={c.cellType || "boolean"}
+                        onChange={(e) => {
+                          const next = [...matrixColumns];
+                          next[idx] = { ...next[idx], cellType: e.target.value as MatrixCellType };
+                          setMatrixColumns(next);
+                        }}
+                        disabled={saving}
+                      >
+                        <option value="boolean">Evet / Hayır</option>
+                        <option value="text">Metin</option>
+                      </select>
+                      <button
+                        className="btn"
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          const next = matrixColumns.filter((_, i) => i !== idx);
+                          setMatrixColumns(next);
+                        }}
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={saving}
+                    onClick={() => setMatrixColumns([...matrixColumns, { key: "", label: "", cellType: "boolean" }])}
+                  >
+                    + Sütun Ekle
+                  </button>
+                </div>
+              </>
+            ) : null}
 
             <div className="hint" style={{ marginTop: 10, marginBottom: 6 }}>
-              Satırlar (her satır: key|label)
+              Satırlar
             </div>
-            <textarea
-              className="ctrl"
-              rows={6}
-              value={matrixRowsText}
-              onChange={(e) => setMatrixRowsText(e.target.value)}
-              disabled={saving}
-              placeholder={
-                "Örn:\n5188|5188 sayılı özel güvenlik yasası kapsamında görev/yetkilerini uyguluyor mu?\nhiyerarsi|Ast-üst ilişkisi kapsamında hiyerarşi kurallarına uyuyor mu?\nkıyafet|Kıyafet, saç ve sakal düzeni uygun mu?"
-              }
-            />
+            <div style={{ display: "grid", gap: 8 }}>
+              {(matrixRows || []).map((r, idx) => (
+                <div key={`row-${idx}`} className="matrixRowLine">
+                  <input
+                    className="ctrl"
+                    placeholder={`Satır ${idx + 1} sorusu`}
+                    value={r.label || ""}
+                    onChange={(e) => {
+                      const next = [...matrixRows];
+                      next[idx] = { ...next[idx], label: e.target.value };
+                      setMatrixRows(next);
+                    }}
+                    disabled={saving}
+                  />
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      const next = matrixRows.filter((_, i) => i !== idx);
+                      setMatrixRows(next);
+                    }}
+                  >
+                    Sil
+                  </button>
+                </div>
+              ))}
+              <button
+                className="btn"
+                type="button"
+                disabled={saving}
+                onClick={() => setMatrixRows([...matrixRows, { key: "", label: "" }])}
+              >
+                + Satır Ekle
+              </button>
+            </div>
 
             <div className="hint" style={{ marginTop: 8 }}>
-              İpucu: <b>key</b> alanları benzersiz olmalı. PDF’de sütunlar başlık + alt başlık olarak basılır.
+              İpucu: Sorular benzersiz olmalı.
             </div>
           </div>
         ) : null}
@@ -389,6 +496,14 @@ export default function AddFieldModal(props: Props) {
               <option value="false">false</option>
               <option value="true">true</option>
             </select>
+          ) : type === "date" ? (
+            <input
+              className="ctrl"
+              type="date"
+              value={defaultValue || nowLocalInputValue()}
+              onChange={(e) => setDefaultValue(e.target.value)}
+              disabled={saving}
+            />
           ) : (
             <input
               className="ctrl"

@@ -14,6 +14,7 @@ export default function AppShell({
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { me, logout } = useAuth();
 
@@ -24,6 +25,14 @@ export default function AppShell({
     window.location.href = "/login";
   };
 
+  const onMenuClick = () => {
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      setDrawerOpen(true);
+      return;
+    }
+    setSidebarOpen((prev) => !prev);
+  };
+
   return (
     <div className="appShell">
       {/* Header */}
@@ -31,8 +40,8 @@ export default function AppShell({
         <div className="headerLeft">
           <button
             className="iconBtn menuBtn"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Menüyü aç"
+            onClick={onMenuClick}
+            aria-label={sidebarOpen ? "Menüyü kapat" : "Menüyü aç"}
           >
             ☰
           </button>
@@ -59,7 +68,7 @@ export default function AppShell({
       </header>
 
       {/* Body */}
-      <div className="appBody">
+      <div className={`appBody ${sidebarOpen ? "sidebarOpen" : "sidebarClosed"}`}>
         <aside className="sidebar">
           <SidebarNav active={active} />
         </aside>

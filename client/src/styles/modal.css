@@ -18,7 +18,14 @@
   border-radius: 16px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
   overflow: hidden;
+  max-height: min(90vh, 900px);
+  display: flex;
+  flex-direction: column;
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-container.modal-lg {
+  width: min(980px, 100%);
 }
 
 /* Header Bölümü */
@@ -62,6 +69,7 @@
   padding: 1.5rem;
   color: #a7acb2;
   line-height: 1.6;
+  overflow: auto;
 }
 
 /* Animasyonlar */
