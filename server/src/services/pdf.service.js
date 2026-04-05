@@ -3,6 +3,7 @@ const path = require("path");
 const puppeteer = require("puppeteer");
 
 const OUT_DIR = path.join(process.cwd(), "uploads", "pdfs");
+const STATIC_PDF_LOGO_PATH = path.join(__dirname, "..", "assets", "CnsLogo.jpg");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 function escapeHtml(s) {
@@ -19,21 +20,24 @@ function absUrl(req, maybeRelative) {
   return `${base}${String(maybeRelative).startsWith("/") ? "" : "/"}${maybeRelative}`;
 }
 
-function resolveLogoSrc(req, maybeLogoUrl) {
-  const raw = String(maybeLogoUrl || "").trim();
-  if (!raw) return "";
-  if (raw.startsWith("http")) return raw;
+let staticPdfLogoSrcCache = null;
 
-  const rel = raw.startsWith("/") ? raw : `/${raw}`;
-
-  // Relative uploads path ise dosya gerçekten var mı kontrol et;
-  // yoksa PDF'te kırık logo göstermeyelim.
-  if (rel.startsWith("/uploads/")) {
-    const absPath = path.join(process.cwd(), rel.replace(/^\/+/, ""));
-    if (!fs.existsSync(absPath)) return "";
+function getStaticPdfLogoSrc() {
+  if (staticPdfLogoSrcCache !== null) return staticPdfLogoSrcCache;
+  if (!fs.existsSync(STATIC_PDF_LOGO_PATH)) {
+    staticPdfLogoSrcCache = "";
+    return staticPdfLogoSrcCache;
   }
 
-  return absUrl(req, rel);
+  const ext = path.extname(STATIC_PDF_LOGO_PATH).toLowerCase();
+  const mime =
+    ext === ".png" ? "image/png" :
+    ext === ".webp" ? "image/webp" :
+    "image/jpeg";
+
+  const base64 = fs.readFileSync(STATIC_PDF_LOGO_PATH).toString("base64");
+  staticPdfLogoSrcCache = `data:${mime};base64,${base64}`;
+  return staticPdfLogoSrcCache;
 }
 
 // matrix cell: values[fieldKey][rowKey][colKey] -> boolean | string
@@ -211,7 +215,7 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
 
   const siteDynamic = site?.dynamic && typeof site.dynamic === "object" ? site.dynamic : {};
   const dynamicKeys = Object.keys(siteDynamic);
-  const logoSrc = resolveLogoSrc(req, site?.logoUrl);
+  const logoSrc = getStaticPdfLogoSrc();
 
   const siteInfoHtml = `
     <div class="site-box">
