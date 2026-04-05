@@ -91,7 +91,7 @@ export default function Forms() {
         title="Formlar"
         subtitle="Form şablonlarını yönet ve kullan."
         right={
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div className="formsToolbar">
             <input
               className="ctrl"
               placeholder="Ara: form adı"
@@ -107,25 +107,30 @@ export default function Forms() {
           </div>
         }
       >
-        <Card title="Form Şablonları" subtitle={`${filtered.length} kayıt`}>
+        <Card className="formsPrimaryCard" title="Form Şablonları" subtitle={`${filtered.length} kayıt`}>
           {loading ? (
             <div className="hint">Yükleniyor...</div>
           ) : filtered.length === 0 ? (
             <EmptyState title="Form yok" description="Henüz form şablonu oluşturulmamış." />
           ) : (
-            <div style={{ display: "grid", gap: 10 }}>
+            <div className="formTemplateList">
               {filtered.map((f) => (
                 <Link
                   key={f._id}
                   to={`/forms/${f._id}`}
-                  className="fieldRow"
+                  className="fieldRow formTemplateItem"
                   style={{ textDecoration: "none" }}
                 >
-                  <div className="fieldRowTop">
-                    <div className="fieldRowTitle">{f.name}</div>
-                    <div className="hint">{(f.fields || []).length} alan</div>
+                  <div className="fieldRowTop formTemplateHead">
+                    <div className="formTemplateMain">
+                      <div className="fieldRowTitle formTemplateTitle">{f.name}</div>
+                    </div>
+                    <div className="hint formTemplateCount">{(f.fields || []).length} alan</div>
                   </div>
-                  <div className="hint">{(f.recipients || []).length} mail alıcısı</div>
+                  <div className="formTemplateStats">
+                    <span>{(f.fields || []).length} alan</span>
+                    <span>{(f.recipients || []).length} mail alıcısı</span>
+                  </div>
                 </Link>
               ))}
             </div>
@@ -136,7 +141,7 @@ export default function Forms() {
         {createOpen && (
           <div style={{ marginTop: 12 }}>
             <Card title="Yeni Form">
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div className="formsCreateRow">
                 <input
                   className="ctrl"
                   value={name}

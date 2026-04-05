@@ -10,6 +10,7 @@ import "./styles/tokens.css";
 import "./styles/globals.css";
 import "./styles/components.css";
 import "./styles/layout.css";
+import "./styles/pages/forms.css";
 import "./styles/pages/site-create.css";
 import "./styles/pages/sites.css";
 import "./styles/modal.css";
