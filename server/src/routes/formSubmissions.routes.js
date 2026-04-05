@@ -22,7 +22,7 @@ function toDiskPath(webPath) {
 
 // create draft
 router.post("/", auth, permit("forms.use"), async (req, res) => {
-  const { templateId, siteId } = req.body || {};
+  const { templateId, siteId, values } = req.body || {};
   if (!templateId || !siteId) return res.status(400).json({ message: "templateId ve siteId zorunlu." });
 
   const tpl = await FormTemplate.findById(templateId).lean();
@@ -34,7 +34,7 @@ router.post("/", auth, permit("forms.use"), async (req, res) => {
   const sub = await FormSubmission.create({
     templateId,
     siteId,
-    values: {},
+    values: values && typeof values === "object" ? values : {},
     status: "DRAFT",
     createdBy: req.user.id,
   });

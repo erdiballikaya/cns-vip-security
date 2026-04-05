@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 
 import AppShell from "../components/Shell/AppShell";
@@ -6,6 +6,7 @@ import Page from "../ui/Page";
 import Card from "../ui/Card";
 import EmptyState from "../ui/EmptyState";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import Modal from "../ui/Modal";
 
 import { useAuth } from "../auth/AuthContext";
 import { can } from "../auth/permissions";
@@ -107,6 +108,12 @@ export default function FormFill() {
   const [saving, setSaving] = useState(false);
 
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraFieldKey, setCameraFieldKey] = useState<string | null>(null);
+  const [cameraBusy, setCameraBusy] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // confirm dialogs
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
@@ -398,48 +405,122 @@ export default function FormFill() {
     }
   };
 
-  const uploadForField = async (fieldKey: string, file: File) => {
+  const uploadCameraPhoto = async (fieldKey: string, file: File) => {
     setUploadingKey(fieldKey);
     try {
       const res = await uploadImage(file);
       const url = typeof res === "string" ? res : (res as any)?.url ?? (res as any)?.path ?? "";
       if (!url) throw new Error("Upload response url boş");
 
-      setField(fieldKey, url);
-      toast.success("Resim yüklendi", "Başarılı");
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? e?.message ?? "Resim yüklenemedi", "Hata");
-    } finally {
-      setUploadingKey(null);
-    }
-  };
-
-  const uploadForFieldMultiple = async (fieldKey: string, files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploadingKey(fieldKey);
-    try {
-      const urls: string[] = [];
-      for (const file of Array.from(files)) {
-        const res = await uploadImage(file);
-        const url = typeof res === "string" ? res : (res as any)?.url ?? (res as any)?.path ?? "";
-        if (url) urls.push(url);
-      }
-      if (!urls.length) throw new Error("Upload response url boş");
-
       setValues((prev) => {
         const p = prev || {};
         const cur = p[fieldKey];
         const arr = Array.isArray(cur) ? cur : cur ? [cur] : [];
-        return { ...p, [fieldKey]: [...arr, ...urls] };
+        return { ...p, [fieldKey]: [...arr, url] };
       });
 
-      toast.success("Resimler yüklendi", "Başarılı");
+      toast.success("Fotoğraf yüklendi", "Başarılı");
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? e?.message ?? "Resim yüklenemedi", "Hata");
     } finally {
       setUploadingKey(null);
     }
   };
+
+  const stopCameraStream = () => {
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const closeCamera = () => {
+    stopCameraStream();
+    setCameraOpen(false);
+    setCameraFieldKey(null);
+    setCameraBusy(false);
+    setCameraError("");
+  };
+
+  const openCamera = async (fieldKey: string) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("Bu cihaz veya tarayıcı kamera erişimini desteklemiyor", "Kamera Yok");
+      return;
+    }
+
+    stopCameraStream();
+    setCameraError("");
+    setCameraBusy(false);
+    setCameraFieldKey(fieldKey);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+    } catch (e: any) {
+      setCameraFieldKey(null);
+      toast.error(e?.message ?? "Kamera açılamadı. Tarayıcı iznini kontrol et.", "Kamera Hatası");
+    }
+  };
+
+  const captureCameraPhoto = async () => {
+    if (!cameraFieldKey || !videoRef.current) return;
+
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Fotoğraf hazırlanamadı.");
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.92);
+    });
+
+    if (!blob) {
+      setCameraError("Fotoğraf oluşturulamadı.");
+      return;
+    }
+
+    setCameraBusy(true);
+    try {
+      const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+      await uploadCameraPhoto(cameraFieldKey, file);
+      closeCamera();
+    } finally {
+      setCameraBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!cameraOpen || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    void videoRef.current.play().catch(() => {
+      setCameraError("Kamera görüntüsü başlatılamadı.");
+    });
+  }, [cameraOpen]);
+
+  useEffect(() => {
+    return () => {
+      stopCameraStream();
+    };
+  }, []);
 
   const renderField = (f: any) => {
     const v = values?.[f.key];
@@ -830,22 +911,16 @@ export default function FormFill() {
         </div>
 
         <div style={{ display: "grid", gap: 10 }}>
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={saving || uploadingKey === f.key}
-            onChange={async (e) => {
-              const files = e.target.files;
-              if (!files || files.length === 0) return;
-              if (files.length === 1) {
-                await uploadForField(f.key, files[0]);
-              } else {
-                await uploadForFieldMultiple(f.key, files);
-              }
-              if (e.currentTarget) e.currentTarget.value = "";
-            }}
-          />
+          <button
+            className="btn btnPrimary"
+            type="button"
+            disabled={saving || uploadingKey === f.key || cameraBusy}
+            onClick={() => void openCamera(f.key)}
+          >
+            {uploadingKey === f.key ? "Yükleniyor..." : "Kamera ile Fotoğraf Çek"}
+          </button>
+
+          <div className="hint">Bu alanda cihazdan dosya seçilemez. Yalnızca anlık kamera çekimi kabul edilir.</div>
 
           {uploadingKey === f.key ? <div className="hint">Yükleniyor...</div> : null}
 
@@ -1107,6 +1182,38 @@ export default function FormFill() {
           onClose={() => setManualConfirmOpen(false)}
           onConfirm={confirmManualSend}
         />
+
+        {cameraOpen ? (
+          <Modal title="Kamera ile Fotoğraf Çek" onClose={closeCamera}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  width: "100%",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,.08)",
+                  background: "rgba(0,0,0,.35)",
+                  minHeight: 240,
+                  objectFit: "cover",
+                }}
+              />
+
+              {cameraError ? <div className="hint">{cameraError}</div> : null}
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <button className="btn" type="button" onClick={closeCamera} disabled={cameraBusy}>
+                  Vazgeç
+                </button>
+                <button className="btn btnPrimary" type="button" onClick={() => void captureCameraPhoto()} disabled={cameraBusy}>
+                  {cameraBusy ? "Kaydediliyor..." : "Fotoğraf Çek"}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        ) : null}
       </Page>
     </AppShell>
   );

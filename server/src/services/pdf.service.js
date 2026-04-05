@@ -13,6 +13,17 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+function formatLongTrDate(value) {
+  if (!value) return "-";
+  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(parsed);
+}
+
 function absUrl(req, maybeRelative) {
   if (!maybeRelative) return "";
   if (String(maybeRelative).startsWith("http")) return String(maybeRelative);
@@ -78,8 +89,8 @@ function renderMatrixHtml(f, submissionValues, site) {
 
   if (!cols.length || !rows.length) {
     return `
-      <div class="row">
-        <div class="label">${escapeHtml(f.label)}</div>
+      <div class="matrix-row">
+        <div class="matrix-label">${escapeHtml(f.label)}</div>
         <div class="value"><span class="muted">Matrix tanımı eksik (rows/columns boş)</span></div>
       </div>
     `;
@@ -126,15 +137,13 @@ function renderMatrixHtml(f, submissionValues, site) {
     .join("");
 
   return `
-    <div class="row">
-      <div class="label">${escapeHtml(f.label)}</div>
-      <div class="value">
-        <div class="mtable-wrap">
-          <table class="mtable ${denseClass}">
-            <thead>${thead}</thead>
-            <tbody>${tbody}</tbody>
-          </table>
-        </div>
+    <div class="matrix-row">
+      <div class="matrix-label">${escapeHtml(f.label)}</div>
+      <div class="mtable-wrap">
+        <table class="mtable ${denseClass}">
+          <thead>${thead}</thead>
+          <tbody>${tbody}</tbody>
+        </table>
       </div>
     </div>
   `;
@@ -193,10 +202,10 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
   const photosBreak = images.length >= 4;
   const imagesHtml = images.length
     ? `
-        <div class="row photos-block ${photosBreak ? "photos-break" : ""}">
-          <div class="label">Fotoğraflar</div>
-          <div class="value">
-            <div class="img-grid">
+        <div class="photos-row photos-block ${photosBreak ? "photos-break" : ""}">
+          <div class="photos-label">Fotoğraflar</div>
+          <div class="photos-value">
+            <div class="img-grid ${images.length === 1 ? "single" : ""}">
               ${images
                 .map(
                   (img) => `
@@ -213,41 +222,47 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
       `
     : "";
 
-  const siteDynamic = site?.dynamic && typeof site.dynamic === "object" ? site.dynamic : {};
-  const dynamicKeys = Object.keys(siteDynamic);
   const logoSrc = getStaticPdfLogoSrc();
+  const formDescription = String(template?.description || "").trim();
+  const submissionMeta = submission?.values?._meta && typeof submission.values._meta === "object" ? submission.values._meta : {};
+  const projectMeta = [
+    { label: "Proje Adı", value: String(site?.name || "").trim() || String(template?.projectName || "").trim() || "-" },
+    {
+      label: "Proje Sorumlusu",
+      value: String(submissionMeta.projectResponsible || "").trim() || String(template?.projectResponsible || "").trim() || "-",
+    },
+    {
+      label: "Tarih",
+      value: formatLongTrDate(submissionMeta.reportDate || template?.reportDate || ""),
+    },
+  ];
+  const companyAddress =
+    "Kurtköy Mah. Yeditepe Sk. No:17/1 A Blok D:10 Pendik/İstanbul Istanbul, Turkey";
 
-  const siteInfoHtml = `
-    <div class="site-box">
-      <div class="site-head">
-        <div>
-          <div class="site-title">${escapeHtml(site?.name || "Site")}</div>
-          ${site?.address ? `<div class="site-sub">${escapeHtml(site.address)}</div>` : ""}
+  const formInfoHtml = `
+    <div class="form-box">
+      <div class="form-head">
+        <div class="form-main">
+          <div class="form-title">${escapeHtml(template?.name || "Form")}</div>
         </div>
-        ${logoSrc ? `<img class="site-logo" src="${escapeHtml(logoSrc)}" alt="Logo" />` : ""}
+        <div class="form-brand">
+          ${logoSrc ? `<img class="form-logo" src="${escapeHtml(logoSrc)}" alt="CNS Logo" />` : ""}
+          <div class="form-address">${escapeHtml(companyAddress)}</div>
+        </div>
       </div>
-      ${
-        dynamicKeys.length
-          ? `
-          <div class="site-section">
-            <div class="site-section-title">Site Bilgileri</div>
-            <div class="site-kv">
-              ${dynamicKeys
-                .sort()
-                .map(
-                  (k) => `
-                <div class="kv-row">
-                  <div class="kv-key">${escapeHtml(k)}</div>
-                  <div class="kv-val">${escapeHtml(siteDynamic[k] ?? "-")}</div>
-                </div>
-              `
-                )
-                .join("")}
-            </div>
-          </div>
-        `
-          : ""
-      }
+      ${formDescription ? `<div class="form-sub">${escapeHtml(formDescription)}</div>` : ""}
+      <div class="form-meta">
+        ${projectMeta
+          .map(
+            (item) => `
+              <div class="form-meta-item">
+                <div class="form-meta-label">${escapeHtml(item.label)}</div>
+                <div class="form-meta-value">${escapeHtml(item.value)}</div>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
     </div>
   `;
 
@@ -369,8 +384,6 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
       <meta charset="utf-8"/>
       <style>
         body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-        h1 { margin: 0 0 6px; font-size: 18px; }
-        .sub { color: #64748b; margin-bottom: 16px; }
 
         .grid { display: grid; gap: 10px; }
         .pdf-grid { display: grid; gap: 12px; }
@@ -378,26 +391,37 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
         .pdf-grid.mode-1x2 { grid-template-columns: 1fr; }
         .pdf-grid.mode-2x1 { grid-template-rows: 1fr; }
         .pdf-grid.mode-2x2 { }
-        .pdf-slot { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
-        .pdf-cell { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; }
+        .pdf-slot { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; break-inside: avoid-page; page-break-inside: avoid; }
+        .pdf-cell { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; break-inside: avoid-page; page-break-inside: avoid; }
 
-        .row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; break-inside: avoid-page; page-break-inside: avoid; }
         .row:last-child { border-bottom: 0; }
+        .matrix-row { padding: 10px 0; border-bottom: 1px solid #f1f5f9; break-inside: avoid-page; page-break-inside: avoid; }
+        .matrix-row:last-child { border-bottom: 0; }
 
         .label { color: #334155; font-weight: 600; }
+        .matrix-label { color: #334155; font-weight: 600; margin-bottom: 8px; }
         .value { color: #0f172a; }
         .muted { color: #94a3b8; }
 
         img { border-radius: 10px; border: 1px solid #e2e8f0; }
 
-        .img-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .photos-row { padding: 10px 0; border-bottom: 1px solid #f1f5f9; break-inside: avoid-page; page-break-inside: avoid; }
+        .photos-row:last-child { border-bottom: 0; }
+        .photos-label { color: #334155; font-weight: 600; margin-bottom: 8px; }
+        .photos-value { width: 100%; }
+        .img-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+        .img-grid.single { grid-template-columns: 1fr; }
         .photos-break { page-break-before: always; break-before: page; }
-        .img-item img { width: 100%; height: 120px; object-fit: cover; }
+        .img-item { break-inside: avoid-page; page-break-inside: avoid; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; background: #fff; }
+        .img-item img { width: 100%; height: auto; max-height: 420px; object-fit: contain; background: #fff; }
         .img-cap { margin-top: 6px; font-size: 10px; color: #64748b; }
 
         /* Matrix table styles */
-        .mtable-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+        .mtable-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; break-inside: avoid-page; page-break-inside: avoid; }
         .mtable { width: 100%; border-collapse: collapse; min-width: 720px; table-layout: auto; font-size: 12px; }
+        .mtable thead { display: table-header-group; }
+        .mtable tr { break-inside: avoid-page; page-break-inside: avoid; }
         .mtable thead th { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 8px; vertical-align: bottom; }
         .mtable tbody td { border-bottom: 1px solid #f1f5f9; padding: 8px; }
         .mtable tbody tr:last-child td { border-bottom: 0; }
@@ -414,22 +438,22 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
         .mtable.dense .mcol-title { font-size: 10px; }
         .mtable.dense .mcol-sub { font-size: 9px; }
 
-        .site-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
-        .site-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-        .site-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
-        .site-sub { color: #64748b; margin-bottom: 10px; }
-        .site-logo { max-height: 70px; max-width: 160px; object-fit: contain; border-radius: 8px; border: 1px solid #e2e8f0; padding: 4px; background: #fff; }
-        .site-section { margin-top: 10px; }
-        .site-section-title { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 6px; }
-        .site-kv { display: grid; gap: 6px; }
-        .kv-row { display: grid; grid-template-columns: 180px 1fr; gap: 10px; }
-        .kv-key { font-weight: 600; color: #334155; }
-        .kv-val { color: #0f172a; }
+        .form-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px; break-inside: avoid-page; page-break-inside: avoid; }
+        .form-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .form-main { flex: 1; min-width: 0; }
+        .form-brand { width: 220px; flex: 0 0 220px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+        .form-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .form-sub { margin-top: 10px; color: #64748b; white-space: pre-wrap; }
+        .form-meta { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .form-meta-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; background: #f8fafc; }
+        .form-meta-label { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+        .form-meta-value { color: #0f172a; font-weight: 600; word-break: break-word; }
+        .form-address { font-size: 11px; line-height: 1.45; color: #475569; text-align: right; }
+        .form-logo { max-height: 70px; max-width: 160px; object-fit: contain; border-radius: 8px; border: 1px solid #e2e8f0; padding: 4px; background: #fff; }
       </style>
     </head>
     <body>
-      <h1>${escapeHtml(template.name)}</h1>
-      ${siteInfoHtml}
+      ${formInfoHtml}
 
       <div class="pdf-grid mode-${layoutMode}" style="${gridStyle}">
         ${gridBody}

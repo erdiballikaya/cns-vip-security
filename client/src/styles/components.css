@@ -96,7 +96,8 @@
   margin-bottom: 6px; /* Boşluk hafifletildi */
   font-weight: 500;
 }
-.ctrl{
+.ctrl,
+.input{
   width:100%;
   padding: 14px; /* Padding artırıldı */
   border-radius: 10px; /* Köşeler uyumlu hale getirildi */
@@ -110,7 +111,8 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 /* Minimalist Focus Efekti */
-.ctrl:focus{
+.ctrl:focus,
+.input:focus{
   border-color: #2bd4c5; /* Sınır, tema rengine döner */
   box-shadow: 0 0 0 1px #2bd4c5; /* Sadece ince bir parlama */
 }

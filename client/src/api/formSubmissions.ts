@@ -21,8 +21,8 @@ export type SubmissionListItem = {
   updatedAt?: string;
 };
 
-export async function createSubmission(templateId: string, siteId: string) {
-  const res = await http.post<FormSubmissionDto>("/form-submissions", { templateId, siteId });
+export async function createSubmission(templateId: string, siteId: string, values?: Record<string, any>) {
+  const res = await http.post<FormSubmissionDto>("/form-submissions", { templateId, siteId, values });
   return res.data;
 }
 

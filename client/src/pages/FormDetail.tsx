@@ -61,6 +61,25 @@ function normalizeOrders1N(list: any[]) {
   return list.map((x, idx) => ({ ...x, order: idx + 1 }));
 }
 
+function todayIsoDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatLongTrDate(value: string) {
+  if (!value) return "-";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(parsed);
+}
+
 function SortableFieldRow({
   f,
   canBuild,
@@ -160,6 +179,8 @@ export default function FormDetail() {
 
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editProjectResponsible, setEditProjectResponsible] = useState("");
+  const [editReportDate, setEditReportDate] = useState(todayIsoDate());
 
   const [fieldModalOpen, setFieldModalOpen] = useState(false);
   const [editField, setEditField] = useState<FieldDto | null>(null);
@@ -202,6 +223,8 @@ export default function FormDetail() {
       setTpl(data);
       setEditName(data.name || "");
       setEditDesc(data.description || "");
+      setEditProjectResponsible("");
+      setEditReportDate(todayIsoDate());
 
       // ✅ drag UI list sync (order'a göre)
       const sorted = [...(data.fields || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -216,7 +239,7 @@ export default function FormDetail() {
   };
 
   const fetchSites = async () => {
-    if (!canUse) return;
+    if (!canUse && !canBuild) return;
     setSiteLoading(true);
     try {
       const res = await http.get<SiteLite[]>("/sites");
@@ -287,7 +310,10 @@ export default function FormDetail() {
 
     try {
       setSaving(true);
-      const updated = await updateForm(tpl._id, { name, description });
+      const updated = await updateForm(tpl._id, {
+        name,
+        description,
+      });
       setTpl(updated);
       toast.success("Form bilgileri kaydedildi", "Başarılı");
     } catch (e: any) {
@@ -356,11 +382,18 @@ export default function FormDetail() {
     if (!tpl) return;
     if (!canUse) return toast.error("Bu işlem için yetkin yok: Form Doldurma", "Erişim Engellendi");
     if (!selectedSiteId) return toast.error("Önce bir site seç", "Eksik Bilgi");
+    if (!editProjectResponsible.trim()) return toast.error("Proje sorumlusu zorunlu", "Eksik Bilgi");
     if (saving) return;
 
     try {
       setSaving(true);
-      const sub = await createSubmission(tpl._id, selectedSiteId);
+      const initialValues = {
+        _meta: {
+          projectResponsible: editProjectResponsible.trim(),
+          reportDate: (editReportDate || todayIsoDate()).trim(),
+        },
+      };
+      const sub = await createSubmission(tpl._id, selectedSiteId, initialValues);
       toast.success("Form başlatıldı", "Başarılı");
       await fetchSubmissions();
       nav(`/forms/fill/${sub._id}`);
@@ -456,7 +489,12 @@ export default function FormDetail() {
       const res = await http.post("/forms/preview-pdf", {
         template: previewTemplate,
         site: previewSite,
-        values: {},
+        values: {
+          _meta: {
+            projectResponsible: editProjectResponsible.trim(),
+            reportDate: (editReportDate || todayIsoDate()).trim(),
+          },
+        },
       }, {
         responseType: "blob",
       });
@@ -524,6 +562,7 @@ export default function FormDetail() {
 
   const drafts = useMemo(() => subs.filter((x) => String(x.status).toUpperCase() === "DRAFT"), [subs]);
   const completed = useMemo(() => subs.filter((x) => String(x.status).toUpperCase() !== "DRAFT"), [subs]);
+  const canStartForm = Boolean(selectedSiteId && editProjectResponsible.trim() && !saving);
 
   return (
     <AppShell title="Form Detayı" active="forms">
@@ -612,11 +651,44 @@ export default function FormDetail() {
                           </option>
                         ))}
                       </select>
-                      <div style={{ height: 12 }} />  
-                      <div className="hint">{selectedSiteId ? sites.find((x) => x._id === selectedSiteId)?.address ?? "" : ""}</div>
+                      <div style={{ height: 16 }} />
+                      <div className="hint" style={{ marginBottom: 16 }}>
+                        {selectedSiteId ? sites.find((x) => x._id === selectedSiteId)?.address ?? "" : ""}
+                      </div>
                     </div>
 
-                    <button className="btn btnPrimary" disabled={saving || !selectedSiteId} onClick={useThisForm}>
+                    <div className="field">
+                      <div className="label">Proje Sorumlusu</div>
+                      <input
+                        className="ctrl"
+                        value={editProjectResponsible}
+                        onChange={(e) => setEditProjectResponsible(e.target.value)}
+                        placeholder="Proje sorumlusunu gir"
+                        disabled={saving}
+                      />
+                    </div>
+
+                    <div className="field">
+                      <div className="label">Tarih</div>
+                      <input className="ctrl" value={formatLongTrDate(editReportDate)} readOnly />
+                    </div>
+
+                    <button
+                      className="btn btnPrimary"
+                      disabled={!canStartForm}
+                      onClick={useThisForm}
+                      style={
+                        canStartForm
+                          ? undefined
+                          : {
+                              background: "rgba(148, 163, 184, 0.18)",
+                              borderColor: "rgba(148, 163, 184, 0.28)",
+                              color: "rgba(226, 232, 240, 0.72)",
+                              boxShadow: "none",
+                              cursor: "not-allowed",
+                            }
+                      }
+                    >
                       {saving ? "Başlatılıyor..." : "Formu Başlat"}
                     </button>
                   </div>

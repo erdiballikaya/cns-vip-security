@@ -18,6 +18,10 @@ function normalizePreviewTemplate(input) {
   return {
     name: String(data.name || "Form Önizleme").trim() || "Form Önizleme",
     description: String(data.description || "").trim(),
+    projectName: String(data.projectName || "").trim(),
+    projectSiteName: String(data.projectSiteName || "").trim(),
+    projectResponsible: String(data.projectResponsible || "").trim(),
+    reportDate: String(data.reportDate || "").trim() || new Date().toISOString().slice(0, 10),
     fields: Array.isArray(data.fields) ? data.fields : [],
     recipients: [],
     pdfLayout: Array.isArray(data.pdfLayout) ? data.pdfLayout : [],
@@ -166,6 +170,10 @@ router.patch("/:id",  auth, permit("forms.builder"), async (req, res) => {
 
   if (req.body.name !== undefined) doc.name = req.body.name;
   if (req.body.description !== undefined) doc.description = req.body.description;
+  if (req.body.projectName !== undefined) doc.projectName = req.body.projectName;
+  if (req.body.projectSiteName !== undefined) doc.projectSiteName = req.body.projectSiteName;
+  if (req.body.projectResponsible !== undefined) doc.projectResponsible = req.body.projectResponsible;
+  if (req.body.reportDate !== undefined) doc.reportDate = req.body.reportDate;
   if (Array.isArray(req.body.pdfLayout)) doc.pdfLayout = req.body.pdfLayout;
   if (typeof req.body.pdfLayoutMode === "string") doc.pdfLayoutMode = req.body.pdfLayoutMode;
   if (req.body.pdfLayoutSlots && typeof req.body.pdfLayoutSlots === "object") doc.pdfLayoutSlots = req.body.pdfLayoutSlots;

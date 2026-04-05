@@ -18,6 +18,10 @@ export type FormTemplateDto = {
   _id: string;
   name: string;
   description?: string;
+  projectName?: string;
+  projectSiteName?: string;
+  projectResponsible?: string;
+  reportDate?: string;
   fields: FormField[];
   recipients: { email: string }[];
   pdfLayout?: string[]; // legacy
@@ -54,7 +58,17 @@ export async function updateForm(
   patch: Partial<
     Pick<
       FormTemplateDto,
-      "name" | "description" | "pdfLayout" | "pdfLayoutMode" | "pdfLayoutSlots" | "pdfLayoutRatios" | "pdfGrid"
+      | "name"
+      | "description"
+      | "projectName"
+      | "projectSiteName"
+      | "projectResponsible"
+      | "reportDate"
+      | "pdfLayout"
+      | "pdfLayoutMode"
+      | "pdfLayoutSlots"
+      | "pdfLayoutRatios"
+      | "pdfGrid"
     >
   >
 ) {

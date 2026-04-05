@@ -69,6 +69,10 @@ const FormTemplateSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     description: { type: String, default: "" },
+    projectName: { type: String, default: "" },
+    projectSiteName: { type: String, default: "" },
+    projectResponsible: { type: String, default: "" },
+    reportDate: { type: String, default: () => new Date().toISOString().slice(0, 10) },
     fields: { type: [FieldSchema], default: [] },
     recipients: { type: Array, default: [] }, // sende nasıl ise
     pdfLayout: { type: [String], default: [] }, // legacy
