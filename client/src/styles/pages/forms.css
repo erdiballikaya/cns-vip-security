@@ -4,6 +4,7 @@
   flex-wrap: wrap;
   align-items: center;
   width: 100%;
+  min-width: 0;
 }
 
 .formsToolbar .ctrl {
@@ -11,13 +12,20 @@
   min-width: min(240px, 100%);
 }
 
+.formsToolbar > * {
+  min-width: 0;
+}
+
 .formTemplateList {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+  min-width: 0;
 }
 
 .formsPrimaryCard {
   width: 100%;
+  min-width: 0;
 }
 
 .formTemplateItem {
@@ -79,7 +87,9 @@
 
   .formsToolbar .ctrl,
   .formsToolbar .btn {
+    flex: none;
     width: 100%;
+    min-width: 0;
   }
 
   .formTemplateItem {

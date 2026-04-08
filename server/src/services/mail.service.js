@@ -1,6 +1,9 @@
 const nodemailer = require("nodemailer");
-const path = require("path");
 const fs = require("fs");
+
+function getSender() {
+  return process.env.MAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER;
+}
 
 function getTransport() {
   const host = process.env.SMTP_HOST;
@@ -14,7 +17,7 @@ function getTransport() {
   return nodemailer.createTransport({
     host,
     port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
+    secure: String(process.env.SMTP_SECURE || "false") === "true",
     auth: { user, pass },
   });
 }
@@ -26,7 +29,7 @@ async function sendFormPdf({ to, subject, text, pdfAbsPath }) {
   if (!exists) throw new Error("PDF file not found");
 
   const info = await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    from: getSender(),
     to,
     subject,
     text,
@@ -46,18 +49,6 @@ function isMailEnabled() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-function createTransport() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: String(process.env.SMTP_SECURE || "false") === "true",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-}
-
 async function sendMail({ to, subject, text, html, attachments }) {
   // SMTP yoksa dev’de loglayıp geç (server çökmesin)
   if (!isMailEnabled()) {
@@ -65,10 +56,10 @@ async function sendMail({ to, subject, text, html, attachments }) {
     return { skipped: true };
   }
 
-  const transporter = createTransport();
+  const transporter = getTransport();
 
   return transporter.sendMail({
-    from: process.env.MAIL_FROM || process.env.SMTP_USER,
+    from: getSender(),
     to,
     subject,
     text,

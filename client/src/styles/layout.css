@@ -152,8 +152,10 @@
 /* Main */
 .appMain{
   min-width:0;
+  width: 100%;
 }
 .container {
+  width: 100%;
   max-width: var(--container);
   padding: 24px;
   margin: 0 auto;
@@ -161,6 +163,7 @@
 
 /* PANEL İÇİN FULL GENİŞLİK */
 .container--fluid {
+  width: 100%;
   max-width: 100%;
 }
 
@@ -208,7 +211,9 @@
   .headerRight > div{
     display: none;
   }
-  .appBody{
+  .appBody,
+  .appBody.sidebarClosed,
+  .appBody.sidebarOpen{
     grid-template-columns: 1fr; 
   }
   .sidebar{

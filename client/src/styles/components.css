@@ -11,10 +11,15 @@
 /* ----- Page ----- */
 .page { 
   display:grid; 
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
   gap: 20px; /* Boşluk artırıldı */
 }
 .pageHead{ 
   display:flex; 
+  width: 100%;
+  min-width: 0;
   justify-content:space-between; 
   gap:20px; 
   align-items:flex-start; 
@@ -32,14 +37,22 @@
 }
 .pageRight{ 
   display:flex; 
+  min-width: 0;
   gap:12px; /* Boşluk artırıldı */
   align-items:center; 
+}
+
+.pageBody {
+  width: 100%;
+  min-width: 0;
 }
 
 /* ----- Card ----- */
 .cardX{
   /* Minimalizm: Daha az opak arka plan */
   background: rgba(49, 54, 73, 0.5); 
+  width: 100%;
+  min-width: 0;
   
   /* Sınır inceltildi */
   border: 1px solid rgba(255, 255, 255, 0.08);
