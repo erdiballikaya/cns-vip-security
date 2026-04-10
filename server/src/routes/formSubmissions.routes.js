@@ -72,7 +72,13 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
     if (!site) return res.status(404).json({ message: "Site bulunamadı." });
 
     // ✅ 1) PDF üret + DB’ye kaydet (mailden bağımsız)
-    const { pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub });
+    let pdfPath;
+    try {
+      ({ pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub }));
+    } catch (e) {
+      console.error("complete-and-send pdf render error", e);
+      return res.status(500).json({ message: "PDF üretimi başarısız oldu." });
+    }
     sub.pdfPath = pdfPath;
     sub.status = "COMPLETED";
     await sub.save(); // ✅ artık PDF kesin kaydolur
@@ -130,25 +136,30 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
 
 // send to one person
 router.post("/:id/send", auth, permit("forms.send"), async (req, res) => {
-  const sub = await FormSubmission.findById(req.params.id);
-  if (!sub) return res.status(404).json({ message: "Kayıt bulunamadı." });
-
-  const tpl = await FormTemplate.findById(sub.templateId).lean();
-  const site = await Site.findById(sub.siteId).lean();
-  if (!tpl || !site) return res.status(400).json({ message: "Form/Site bulunamadı." });
-
-  const to = normalizeEmail(req.body?.to);
-  if (!to || !to.includes("@")) return res.status(400).json({ message: "Email geçersiz." });
-
-  // pdf yoksa üret
-  if (!sub.pdfPath) {
-    const { pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub });
-    sub.pdfPath = pdfPath;
-  }
-
-  const pdfAbs = toDiskPath(sub.pdfPath);
-
   try {
+    const sub = await FormSubmission.findById(req.params.id);
+    if (!sub) return res.status(404).json({ message: "Kayıt bulunamadı." });
+
+    const tpl = await FormTemplate.findById(sub.templateId).lean();
+    const site = await Site.findById(sub.siteId).lean();
+    if (!tpl || !site) return res.status(400).json({ message: "Form/Site bulunamadı." });
+
+    const to = normalizeEmail(req.body?.to);
+    if (!to || !to.includes("@")) return res.status(400).json({ message: "Email geçersiz." });
+
+    // pdf yoksa üret
+    if (!sub.pdfPath) {
+      try {
+        const { pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub });
+        sub.pdfPath = pdfPath;
+      } catch (e) {
+        console.error("single-send pdf render error", e);
+        return res.status(500).json({ message: "PDF üretimi başarısız oldu." });
+      }
+    }
+
+    const pdfAbs = toDiskPath(sub.pdfPath);
+
     await sendFormPdf({
       to,
       subject: `${tpl.name} — ${site.name || "Site"}`,
@@ -159,9 +170,14 @@ router.post("/:id/send", auth, permit("forms.send"), async (req, res) => {
     await sub.save();
     res.json({ ok: true });
   } catch (e) {
-    sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
-    await sub.save();
-    res.status(500).json({ message: "Mail gönderilemedi" });
+    console.error("single-send mail error", e);
+    const sub = await FormSubmission.findById(req.params.id).catch(() => null);
+    const to = normalizeEmail(req.body?.to);
+    if (sub && to) {
+      sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
+      await sub.save().catch(() => null);
+    }
+    return res.status(500).json({ message: "Mail gönderilemedi" });
   }
 });
 
