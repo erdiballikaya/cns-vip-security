@@ -49,6 +49,17 @@ app.use("/api/form-submissions", formSubmissionsRoutes);
 app.use("/api/page-schemas", pageSchemasRoutes);
 app.use("/api/pages", pagesRoutes);
 
+app.use((err, req, res, next) => {
+  console.error(`[API ERROR] ${req.method} ${req.originalUrl}`, err);
+  if (res.headersSent) return next(err);
+
+  if (req.originalUrl.startsWith("/api/")) {
+    return res.status(500).json({ message: "Sunucu hatası oluştu." });
+  }
+
+  return res.status(500).send("Internal Server Error");
+});
+
 // Start
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`API running on ${port}`));

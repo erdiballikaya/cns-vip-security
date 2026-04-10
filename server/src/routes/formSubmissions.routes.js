@@ -61,65 +61,70 @@ router.patch("/:id", auth, permit("forms.use"), async (req, res) => {
 
 // complete + send to template recipients
 router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, res) => {
-  const sub = await FormSubmission.findById(req.params.id);
-  if (!sub) return res.status(404).json({ message: "Kayıt bulunamadı." });
+  try {
+    const sub = await FormSubmission.findById(req.params.id);
+    if (!sub) return res.status(404).json({ message: "Kayıt bulunamadı." });
 
-  const tpl = await FormTemplate.findById(sub.templateId).lean();
-  if (!tpl) return res.status(404).json({ message: "Form bulunamadı." });
+    const tpl = await FormTemplate.findById(sub.templateId).lean();
+    if (!tpl) return res.status(404).json({ message: "Form bulunamadı." });
 
-  const site = await Site.findById(sub.siteId).lean();
-  if (!site) return res.status(404).json({ message: "Site bulunamadı." });
+    const site = await Site.findById(sub.siteId).lean();
+    if (!site) return res.status(404).json({ message: "Site bulunamadı." });
 
-  // ✅ 1) PDF üret + DB’ye kaydet (mailden bağımsız)
-  const { pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub });
-  sub.pdfPath = pdfPath;
-  sub.status = "COMPLETED";
-  await sub.save(); // ✅ artık PDF kesin kaydolur
+    // ✅ 1) PDF üret + DB’ye kaydet (mailden bağımsız)
+    const { pdfPath } = await renderPdf(req, { template: tpl, site, submission: sub });
+    sub.pdfPath = pdfPath;
+    sub.status = "COMPLETED";
+    await sub.save(); // ✅ artık PDF kesin kaydolur
 
-  const recipients = (tpl.recipients || [])
-    .map((r) => normalizeEmail(r.email))
-    .filter(Boolean);
+    const recipients = (tpl.recipients || [])
+      .map((r) => normalizeEmail(r.email))
+      .filter(Boolean);
 
-  // ✅ 2) recipients boşsa 400 dönme, PDF hazır zaten
-  if (!recipients.length) {
+    // ✅ 2) recipients boşsa 400 dönme, PDF hazır zaten
+    if (!recipients.length) {
+      return res.json({
+        ok: true,
+        pdfPath: sub.pdfPath,
+        mailOk: false,
+        message: "PDF üretildi ama mail alıcısı boş olduğu için mail gönderilmedi.",
+        mailLog: sub.mailLog,
+      });
+    }
+
+    const pdfAbs = toDiskPath(sub.pdfPath);
+
+    // ✅ 3) mail gönderim hatalarını logla ama PDF’yi bozma
+    let anyFail = false;
+
+    for (const to of recipients) {
+      try {
+        await sendFormPdf({
+          to,
+          subject: `${tpl.name} — ${site.name || "Site"}`,
+          text: "Form PDF ektedir.",
+          pdfAbsPath: pdfAbs,
+        });
+        sub.mailLog.push({ to, ok: true, at: new Date() });
+      } catch (e) {
+        anyFail = true;
+        sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
+      }
+    }
+
+    await sub.save();
+
     return res.json({
       ok: true,
       pdfPath: sub.pdfPath,
-      mailOk: false,
-      message: "PDF üretildi ama mail alıcısı boş olduğu için mail gönderilmedi.",
+      mailOk: !anyFail,
       mailLog: sub.mailLog,
+      message: anyFail ? "PDF üretildi, bazı mailler gönderilemedi." : "PDF üretildi, mailler gönderildi.",
     });
+  } catch (e) {
+    console.error("POST /form-submissions/:id/complete-and-send error", e);
+    return res.status(500).json({ message: "PDF veya mail işlemi sırasında sunucu hatası oluştu." });
   }
-
-  const pdfAbs = toDiskPath(sub.pdfPath);
-
-  // ✅ 3) mail gönderim hatalarını logla ama PDF’yi bozma
-  let anyFail = false;
-
-  for (const to of recipients) {
-    try {
-      await sendFormPdf({
-        to,
-        subject: `${tpl.name} — ${site.name || "Site"}`,
-        text: "Form PDF ektedir.",
-        pdfAbsPath: pdfAbs,
-      });
-      sub.mailLog.push({ to, ok: true, at: new Date() });
-    } catch (e) {
-      anyFail = true;
-      sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
-    }
-  }
-
-  await sub.save();
-
-  return res.json({
-    ok: true,
-    pdfPath: sub.pdfPath,
-    mailOk: !anyFail,
-    mailLog: sub.mailLog,
-    message: anyFail ? "PDF üretildi, bazı mailler gönderilemedi." : "PDF üretildi, mailler gönderildi.",
-  });
 });
 
 

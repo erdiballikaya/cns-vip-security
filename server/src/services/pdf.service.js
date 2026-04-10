@@ -6,6 +6,26 @@ const OUT_DIR = path.join(process.cwd(), "uploads", "pdfs");
 const STATIC_PDF_LOGO_PATH = path.join(__dirname, "..", "assets", "CnsLogo.jpg");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
+function getBrowserLaunchOptions() {
+  const args = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--font-render-hinting=none",
+  ];
+
+  const opts = {
+    headless: "new",
+    args,
+  };
+
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+
+  return opts;
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -462,7 +482,7 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
   </html>
   `;
 
-  const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch(getBrowserLaunchOptions());
   let pdfBuffer = null;
   try {
     const page = await browser.newPage();
