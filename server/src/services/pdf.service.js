@@ -21,6 +21,12 @@ function getBrowserLaunchOptions() {
 
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  } else {
+    try {
+      opts.executablePath = puppeteer.executablePath();
+    } catch {
+      // Let Puppeteer resolve its bundled browser if available.
+    }
   }
 
   return opts;
