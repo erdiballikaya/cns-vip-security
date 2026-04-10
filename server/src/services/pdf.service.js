@@ -108,6 +108,12 @@ function resolveMatrixColumns(f, submissionValues, site) {
   return Array.isArray(f.columns) ? f.columns : [];
 }
 
+function renderBooleanMark(cell) {
+  if (cell === true) return '<span class="boolMark yes" aria-label="Evet"></span>';
+  if (cell === false) return '<span class="boolMark no" aria-label="Hayır"></span>';
+  return "";
+}
+
 function renderMatrixHtml(f, submissionValues, site) {
   const cols = resolveMatrixColumns(f, submissionValues, site);
   const rows = Array.isArray(f.rows) ? f.rows : [];
@@ -149,7 +155,7 @@ function renderMatrixHtml(f, submissionValues, site) {
           if (colCellType === "text") {
             return `<td class="mtd">${escapeHtml(cell ?? "")}</td>`;
           }
-          return `<td class="mtd">${cell === true ? "✅" : cell === false ? "❌" : ""}</td>`;
+          return `<td class="mtd">${renderBooleanMark(cell)}</td>`;
         })
         .join("");
 
@@ -456,6 +462,33 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
         .mtd-left { text-align: left; color: #0f172a; font-weight: 600; word-break: break-word; }
         .mth { text-align: center; white-space: normal; word-break: break-word; }
         .mtd { text-align: center; word-break: break-word; }
+        .boolMark { display: inline-block; position: relative; width: 16px; height: 16px; border: 1.5px solid #94a3b8; border-radius: 4px; vertical-align: middle; }
+        .boolMark.yes { border-color: #16a34a; background: #ecfdf5; }
+        .boolMark.yes::after {
+          content: "";
+          position: absolute;
+          left: 4px;
+          top: 1px;
+          width: 5px;
+          height: 9px;
+          border-right: 2px solid #16a34a;
+          border-bottom: 2px solid #16a34a;
+          transform: rotate(45deg);
+        }
+        .boolMark.no { border-color: #dc2626; background: #fef2f2; }
+        .boolMark.no::before,
+        .boolMark.no::after {
+          content: "";
+          position: absolute;
+          left: 7px;
+          top: 2px;
+          width: 2px;
+          height: 10px;
+          background: #dc2626;
+          border-radius: 2px;
+        }
+        .boolMark.no::before { transform: rotate(45deg); }
+        .boolMark.no::after { transform: rotate(-45deg); }
 
         .mcol-title { font-weight: 700; font-size: 12px; }
         .mcol-sub { margin-top: 3px; font-size: 10px; color: #64748b; font-weight: 500; }
