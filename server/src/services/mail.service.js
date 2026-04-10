@@ -1,5 +1,6 @@
-const nodemailer = require("nodemailer");
 const fs = require("fs");
+const path = require("path");
+const nodemailer = require("nodemailer");
 
 function getSender() {
   return process.env.MAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER;
@@ -22,7 +23,7 @@ function getTransport() {
   });
 }
 
-async function sendFormPdf({ to, subject, text, pdfAbsPath }) {
+async function sendFormPdf({ to, subject, text, pdfAbsPath, attachmentFilename }) {
   const transporter = getTransport();
 
   const exists = fs.existsSync(pdfAbsPath);
@@ -35,7 +36,7 @@ async function sendFormPdf({ to, subject, text, pdfAbsPath }) {
     text,
     attachments: [
       {
-        filename: "form.pdf",
+        filename: attachmentFilename || path.basename(pdfAbsPath) || "form.pdf",
         path: pdfAbsPath,
         contentType: "application/pdf",
       },

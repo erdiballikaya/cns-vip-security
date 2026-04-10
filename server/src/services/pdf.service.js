@@ -6,6 +6,56 @@ const OUT_DIR = path.join(process.cwd(), "uploads", "pdfs");
 const STATIC_PDF_LOGO_PATH = path.join(__dirname, "..", "assets", "CnsLogo.jpg");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
+function normalizeReportDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return new Date().toISOString().slice(0, 10);
+}
+
+function slugFilenamePart(value, fallback) {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+
+  const normalized = raw
+    .replace(/İ/g, "I")
+    .replace(/I/g, "I")
+    .replace(/ı/g, "i")
+    .replace(/Ğ/g, "G")
+    .replace(/ğ/g, "g")
+    .replace(/Ü/g, "U")
+    .replace(/ü/g, "u")
+    .replace(/Ş/g, "S")
+    .replace(/ş/g, "s")
+    .replace(/Ö/g, "O")
+    .replace(/ö/g, "o")
+    .replace(/Ç/g, "C")
+    .replace(/ç/g, "c")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_")
+    .slice(0, 80);
+
+  return normalized || fallback;
+}
+
+function buildPdfFileName(template, site, submission) {
+  const reportDate = normalizeReportDate(submission?.values?._meta?.reportDate);
+  const sitePart = slugFilenamePart(site?.name, "Site");
+  const formPart = slugFilenamePart(template?.name, "Form");
+  const baseName = `${reportDate}_${sitePart}_${formPart}`;
+
+  let fileName = `${baseName}.pdf`;
+  let counter = 2;
+  while (fs.existsSync(path.join(OUT_DIR, fileName))) {
+    fileName = `${baseName}_${counter}.pdf`;
+    counter += 1;
+  }
+
+  return fileName;
+}
+
 function getBrowserLaunchOptions() {
   const args = [
     "--no-sandbox",
@@ -185,7 +235,7 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
   const output = opts?.output === "buffer" ? "buffer" : "file";
   const shouldWriteFile = output === "file";
 
-  const fileName = shouldWriteFile ? `form-${submission._id}-${Date.now()}.pdf` : null;
+  const fileName = shouldWriteFile ? buildPdfFileName(template, site, submission) : null;
   const outPath = shouldWriteFile ? path.join(OUT_DIR, fileName) : null;
 
   const images = [];
