@@ -25,6 +25,18 @@ const SiteSchema = new mongoose.Schema(
       default: [],
     },
 
+    notificationRecipients: {
+      type: [
+        new mongoose.Schema(
+          {
+            email: { type: String, required: true, trim: true, lowercase: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

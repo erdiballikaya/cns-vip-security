@@ -83,7 +83,7 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
     sub.status = "COMPLETED";
     await sub.save(); // ✅ artık PDF kesin kaydolur
 
-    const recipients = (tpl.recipients || [])
+    const recipients = (site.notificationRecipients || [])
       .map((r) => normalizeEmail(r.email))
       .filter(Boolean);
 
@@ -93,7 +93,7 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
         ok: true,
         pdfPath: sub.pdfPath,
         mailOk: false,
-        message: "PDF üretildi ama mail alıcısı boş olduğu için mail gönderilmedi.",
+        message: "PDF üretildi ama seçili site için mail alıcısı tanımlı olmadığı için mail gönderilmedi.",
         mailLog: sub.mailLog,
       });
     }

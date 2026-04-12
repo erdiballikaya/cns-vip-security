@@ -48,6 +48,41 @@ router.patch("/:id", auth, permit("sites.edit"), async (req, res) => {
   res.json(updated);
 });
 
+router.post("/:id/recipients", auth, permit("sites.edit"), async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return res.status(400).json({ message: "Geçerli bir email gir." });
+  }
+
+  const site = await Site.findById(req.params.id);
+  if (!site) return res.status(404).json({ message: "Site bulunamadı." });
+
+  const exists = (site.notificationRecipients || []).some((r) => String(r.email).toLowerCase() === email);
+  if (exists) return res.status(409).json({ message: "Bu email zaten ekli." });
+
+  site.notificationRecipients = site.notificationRecipients || [];
+  site.notificationRecipients.push({ email });
+  await site.save();
+  res.json(site);
+});
+
+router.delete("/:id/recipients/:email", auth, permit("sites.edit"), async (req, res) => {
+  const email = decodeURIComponent(String(req.params.email || "")).trim().toLowerCase();
+
+  const site = await Site.findById(req.params.id);
+  if (!site) return res.status(404).json({ message: "Site bulunamadı." });
+
+  const before = (site.notificationRecipients || []).length;
+  site.notificationRecipients = (site.notificationRecipients || []).filter((r) => String(r.email).toLowerCase() !== email);
+
+  if ((site.notificationRecipients || []).length === before) {
+    return res.status(404).json({ message: "Email bulunamadı." });
+  }
+
+  await site.save();
+  res.json(site);
+});
+
 // delete
 router.delete("/:id", auth, permit("sites.delete"), async (req, res) => {
   const deleted = await Site.findByIdAndDelete(req.params.id).lean();

@@ -19,8 +19,6 @@ import {
   getForm,
   updateForm,
   removeField,
-  addRecipient,
-  removeRecipient,
   reorderFields,
   deleteForm,
   type FormTemplateDto,
@@ -34,13 +32,14 @@ import {
 } from "../api/formSubmissions";
 
 import { http } from "../api/http";
+import { addSiteRecipient, removeSiteRecipient, type SiteDto } from "../api/sites";
 
 // ✅ drag-drop (dnd-kit)
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type SiteLite = { _id: string; name: string; address?: string };
+type SiteLite = Pick<SiteDto, "_id" | "name" | "address" | "notificationRecipients">;
 type FieldDto = any;
 
 function normalizeEmail(s: string) {
@@ -208,6 +207,7 @@ export default function FormDetail() {
   if (!id) return <Navigate to="/forms" replace />;
 
   const actionBtnStyle: React.CSSProperties = { padding: "6px 10px" };
+  const selectedSite = useMemo(() => sites.find((s) => s._id === selectedSiteId) || null, [sites, selectedSiteId]);
 
   // ✅ sensors (scroll/drag daha iyi)
   const sensors = useSensors(
@@ -243,8 +243,12 @@ export default function FormDetail() {
     setSiteLoading(true);
     try {
       const res = await http.get<SiteLite[]>("/sites");
-      setSites(res.data || []);
-      if (!selectedSiteId && res.data?.[0]?._id) setSelectedSiteId(res.data[0]._id);
+      const rows = res.data || [];
+      setSites(rows);
+      setSelectedSiteId((prev) => {
+        if (prev && rows.some((s) => s._id === prev)) return prev;
+        return rows[0]?._id || "";
+      });
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Siteler alınamadı", "Hata");
       setSites([]);
@@ -342,7 +346,7 @@ export default function FormDetail() {
   };
 
   const handleAddRecipient = async () => {
-    if (!tpl) return;
+    if (!selectedSiteId) return toast.error("Önce bir site seç", "Eksik Bilgi");
     if (!canBuild) return toast.error("Bu işlem için yetkin yok: Form Oluşturma / Düzenleme", "Erişim Engellendi");
     if (saving) return;
 
@@ -351,8 +355,8 @@ export default function FormDetail() {
 
     try {
       setSaving(true);
-      const updated = await addRecipient(tpl._id, email);
-      setTpl(updated);
+      const updated = await addSiteRecipient(selectedSiteId, email);
+      setSites((prev) => prev.map((s) => (s._id === selectedSiteId ? updated : s)));
       setNewRecipient("");
       toast.success("Mail alıcısı eklendi", "Başarılı");
     } catch (e: any) {
@@ -363,13 +367,13 @@ export default function FormDetail() {
   };
 
   const handleRemoveRecipient = async (email: string) => {
-    if (!tpl) return;
+    if (!selectedSiteId) return;
     if (!canBuild) return;
 
     try {
       setSaving(true);
-      const updated = await removeRecipient(tpl._id, email);
-      setTpl(updated);
+      const updated = await removeSiteRecipient(selectedSiteId, email);
+      setSites((prev) => prev.map((s) => (s._id === selectedSiteId ? updated : s)));
       toast.success("Mail alıcısı kaldırıldı", "Başarılı");
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Mail alıcısı kaldırılamadı", "Hata");
@@ -627,7 +631,7 @@ export default function FormDetail() {
                     </div>
 
                     <div className="hint">
-                      Alan sayısı: <b>{tpl?.fields?.length ?? 0}</b> · Mail alıcısı: <b>{tpl?.recipients?.length ?? 0}</b>
+                      Alan sayısı: <b>{tpl?.fields?.length ?? 0}</b> · Mail alıcıları site bazlı yönetilir
                     </div>
                   </div>
                 )}
@@ -653,7 +657,10 @@ export default function FormDetail() {
                       </select>
                       <div style={{ height: 16 }} />
                       <div className="hint" style={{ marginBottom: 16 }}>
-                        {selectedSiteId ? sites.find((x) => x._id === selectedSiteId)?.address ?? "" : ""}
+                        {selectedSite?.address ?? ""}
+                      </div>
+                      <div className="hint">
+                        Seçili site mail alıcısı: <b>{selectedSite?.notificationRecipients?.length ?? 0}</b>
                       </div>
                     </div>
 
@@ -735,9 +742,18 @@ export default function FormDetail() {
                 )}
               </Card>
 
-              <Card title="Mail Atılacak Kişiler" subtitle={canBuild ? "Ekle / sil" : "Salt görüntüleme"}>
+              <Card
+                title="Mail Atılacak Kişiler"
+                subtitle={
+                  selectedSite
+                    ? `${selectedSite.name} için ${canBuild ? "ekle / sil" : "salt görüntüleme"}`
+                    : "Önce bir site seç"
+                }
+              >
                 {loading ? (
                   <div className="hint">Yükleniyor...</div>
+                ) : !selectedSite ? (
+                  <EmptyState title="Site seçilmedi" description="Önce Formu Kullan bölümünden bir site seç." />
                 ) : (
                   <div style={{ display: "grid", gap: 10 }}>
                     {canBuild && (
@@ -756,11 +772,14 @@ export default function FormDetail() {
                       </div>
                     )}
 
-                    {(tpl?.recipients || []).length === 0 ? (
-                      <EmptyState title="Alıcı yok" description={canBuild ? "En az 1 mail alıcısı ekle." : "Bu form için mail alıcısı tanımlı değil."} />
+                    {(selectedSite?.notificationRecipients || []).length === 0 ? (
+                      <EmptyState
+                        title="Alıcı yok"
+                        description={canBuild ? "Bu site için en az 1 mail alıcısı ekle." : "Bu site için mail alıcısı tanımlı değil."}
+                      />
                     ) : (
                       <div style={{ display: "grid", gap: 8 }}>
-                        {(tpl?.recipients || []).map((r) => (
+                        {(selectedSite?.notificationRecipients || []).map((r) => (
                           <div key={r.email} className="fieldRow">
                             <div className="fieldRowTop">
                               <div className="fieldRowTitle">{r.email}</div>
