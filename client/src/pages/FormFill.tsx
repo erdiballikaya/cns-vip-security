@@ -16,6 +16,7 @@ import { getForm, type FormTemplateDto } from "../api/forms";
 import {
   completeAndSend,
   getSubmission,
+  type MailResultItem,
   sendToOne,
   updateSubmission,
   type FormSubmissionDto,
@@ -119,14 +120,25 @@ export default function FormFill() {
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
 
   // manual send
-  const recipients = useMemo(() => (tpl?.recipients || []).map((r) => r.email), [tpl]);
+  const recipients = useMemo(() => (site?.notificationRecipients || []).map((r) => r.email), [site]);
   const [manualTo, setManualTo] = useState("");
   const [manualPersonnelDrafts, setManualPersonnelDrafts] = useState<Record<string, { name: string; role: string }>>({});
   const [manualConfirmOpen, setManualConfirmOpen] = useState(false);
+  const [mailResultOpen, setMailResultOpen] = useState(false);
+  const [mailResultTitle, setMailResultTitle] = useState("");
+  const [mailResultMessage, setMailResultMessage] = useState("");
+  const [mailResultItems, setMailResultItems] = useState<MailResultItem[]>([]);
 
   // mail log details toggle
   const [openLog, setOpenLog] = useState<Record<string, boolean>>({});
   const toggleLog = (key: string) => setOpenLog((p) => ({ ...(p || {}), [key]: !p?.[key] }));
+
+  const openMailResult = (title: string, message: string, items: MailResultItem[]) => {
+    setMailResultTitle(title);
+    setMailResultMessage(message);
+    setMailResultItems(items || []);
+    setMailResultOpen(true);
+  };
 
   if (!submissionId) return <Navigate to="/forms" replace />;
   if (!canUse) return <Navigate to="/403" replace />;
@@ -197,7 +209,8 @@ export default function FormFill() {
       const siteData = await getSiteById(String(s.siteId));
       setSite(siteData);
 
-      if (!manualTo && (t.recipients || []).length) setManualTo(t.recipients[0].email);
+      const siteRecipients = (siteData.notificationRecipients || []).map((r) => r.email).filter(Boolean);
+      if (!manualTo && siteRecipients.length) setManualTo(siteRecipients[0]);
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Form kaydı yüklenemedi", "Hata");
       setSub(null);
@@ -343,8 +356,8 @@ export default function FormFill() {
     if (!canSend) return toast.error("Bu işlem için yetkin yok: Form Mail Gönderme", "Erişim Engellendi");
     if (!tpl) return;
 
-    if ((tpl.recipients || []).length === 0) {
-      return toast.error("Mail alıcıları boş. Önce Form Detayı sayfasından alıcı ekle.", "Eksik Bilgi");
+    if (recipients.length === 0) {
+      return toast.error("Mail alıcıları boş. Önce seçili site için alıcı ekle.", "Eksik Bilgi");
     }
     if (requiredMissing) {
       return toast.error("Zorunlu alanlar eksik. Tamamlamadan önce doldur.", "Eksik Bilgi");
@@ -365,11 +378,15 @@ export default function FormFill() {
       setSub(updated);
 
       // sonra complete & send
-      await completeAndSend(sub._id);
+      const result = await completeAndSend(sub._id);
 
-      toast.success("Mail gönderimi başlatıldı", "Başarılı");
       await refresh();
       setConfirmCompleteOpen(false);
+      openMailResult(
+        "Mail Gönderim Sonucu",
+        result?.message || "Mail gönderimi tamamlandı.",
+        result?.results || []
+      );
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Tamamlama/Mail gönderimi başarısız", "Hata");
     } finally {
@@ -393,12 +410,18 @@ export default function FormFill() {
       // önce kaydet
       await updateSubmission(sub._id, values);
 
-      await sendToOne(sub._id, manualTo);
-      toast.success("Mail gönderildi", "Başarılı");
+      const result = await sendToOne(sub._id, manualTo);
 
       await refresh();
+      openMailResult(
+        "Mail Gönderim Sonucu",
+        result?.message || "Mail gönderildi.",
+        result?.results || []
+      );
     } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? "Mail gönderilemedi", "Hata");
+      const message = e?.response?.data?.message ?? "Mail gönderilemedi";
+      const items = e?.response?.data?.results || (manualTo ? [{ to: manualTo, ok: false, error: message }] : []);
+      openMailResult("Mail Gönderim Sonucu", message, items);
     } finally {
       setSaving(false);
       setManualConfirmOpen(false);
@@ -1084,7 +1107,7 @@ export default function FormFill() {
                   </button>
                 </div>
               ) : (
-                <EmptyState title="Alıcı yok" description="Önce Form Detayı sayfasından mail alıcısı ekle." />
+                <EmptyState title="Alıcı yok" description="Önce seçili site için mail alıcısı ekle." />
               )}
 
               {sub.pdfPath ? (
@@ -1209,6 +1232,51 @@ export default function FormFill() {
                 </button>
                 <button className="btn btnPrimary" type="button" onClick={() => void captureCameraPhoto()} disabled={cameraBusy}>
                   {cameraBusy ? "Kaydediliyor..." : "Fotoğraf Çek"}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        ) : null}
+
+        {mailResultOpen ? (
+          <Modal title={mailResultTitle || "Mail Gönderim Sonucu"} onClose={() => setMailResultOpen(false)}>
+            <div style={{ display: "grid", gap: 14 }}>
+              <div style={{ lineHeight: 1.5 }}>{mailResultMessage}</div>
+
+              {mailResultItems.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {mailResultItems.map((item, idx) => (
+                    <div
+                      key={`${item.to}-${idx}`}
+                      style={{
+                        display: "grid",
+                        gap: 6,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: `1px solid ${item.ok ? "rgba(16,185,129,.35)" : "rgba(239,68,68,.35)"}`,
+                        background: item.ok ? "rgba(16,185,129,.08)" : "rgba(239,68,68,.08)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 700, wordBreak: "break-word" }}>{item.to}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: item.ok ? "#34d399" : "#f87171" }}>
+                          {item.ok ? "Başarılı" : "Başarısız"}
+                        </div>
+                      </div>
+
+                      {!item.ok && item.error ? (
+                        <div style={{ fontSize: 12, lineHeight: 1.5, wordBreak: "break-word" }}>{item.error}</div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="hint">Bu işlem için ayrı bir alıcı sonucu dönmedi.</div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn btnPrimary" type="button" onClick={() => setMailResultOpen(false)}>
+                  Tamam
                 </button>
               </div>
             </div>

@@ -93,12 +93,14 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
         ok: true,
         pdfPath: sub.pdfPath,
         mailOk: false,
+        results: [],
         message: "PDF üretildi ama seçili site için mail alıcısı tanımlı olmadığı için mail gönderilmedi.",
         mailLog: sub.mailLog,
       });
     }
 
     const pdfAbs = toDiskPath(sub.pdfPath);
+    const results = [];
 
     // ✅ 3) mail gönderim hatalarını logla ama PDF’yi bozma
     let anyFail = false;
@@ -111,10 +113,14 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
           text: "Form PDF ektedir.",
           pdfAbsPath: pdfAbs,
         });
-        sub.mailLog.push({ to, ok: true, at: new Date() });
+        const entry = { to, ok: true, at: new Date() };
+        sub.mailLog.push(entry);
+        results.push(entry);
       } catch (e) {
         anyFail = true;
-        sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
+        const entry = { to, ok: false, at: new Date(), error: String(e?.message || e) };
+        sub.mailLog.push(entry);
+        results.push(entry);
       }
     }
 
@@ -124,6 +130,7 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
       ok: true,
       pdfPath: sub.pdfPath,
       mailOk: !anyFail,
+      results,
       mailLog: sub.mailLog,
       message: anyFail ? "PDF üretildi, bazı mailler gönderilemedi." : "PDF üretildi, mailler gönderildi.",
     });
@@ -166,18 +173,21 @@ router.post("/:id/send", auth, permit("forms.send"), async (req, res) => {
       text: "Form PDF ektedir.",
       pdfAbsPath: pdfAbs,
     });
-    sub.mailLog.push({ to, ok: true, at: new Date() });
+    const entry = { to, ok: true, at: new Date() };
+    sub.mailLog.push(entry);
     await sub.save();
-    res.json({ ok: true });
+    res.json({ ok: true, results: [entry], message: "Mail gönderildi." });
   } catch (e) {
     console.error("single-send mail error", e);
     const sub = await FormSubmission.findById(req.params.id).catch(() => null);
     const to = normalizeEmail(req.body?.to);
+    let entry = null;
     if (sub && to) {
-      sub.mailLog.push({ to, ok: false, at: new Date(), error: String(e?.message || e) });
+      entry = { to, ok: false, at: new Date(), error: String(e?.message || e) };
+      sub.mailLog.push(entry);
       await sub.save().catch(() => null);
     }
-    return res.status(500).json({ message: "Mail gönderilemedi" });
+    return res.status(500).json({ message: "Mail gönderilemedi", results: entry ? [entry] : [] });
   }
 });
 

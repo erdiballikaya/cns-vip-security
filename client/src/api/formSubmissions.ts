@@ -10,6 +10,22 @@ export type FormSubmissionDto = {
   mailLog?: { to: string; ok: boolean; at: string; error?: string }[];
 };
 
+export type MailResultItem = {
+  to: string;
+  ok: boolean;
+  at?: string;
+  error?: string;
+};
+
+export type SendMailResult = {
+  ok: boolean;
+  pdfPath?: string;
+  mailOk?: boolean;
+  message?: string;
+  results?: MailResultItem[];
+  mailLog?: MailResultItem[];
+};
+
 export type SubmissionListItem = {
   _id: string;
   status: string;
@@ -38,12 +54,12 @@ export async function updateSubmission(id: string, values: any) {
 
 
 export async function completeAndSend(id: string) {
-  const res = await http.post(`/form-submissions/${id}/complete-and-send`);
+  const res = await http.post<SendMailResult>(`/form-submissions/${id}/complete-and-send`);
   return res.data;
 }
 
 export async function sendToOne(id: string, to: string) {
-  const res = await http.post(`/form-submissions/${id}/send`, { to });
+  const res = await http.post<SendMailResult>(`/form-submissions/${id}/send`, { to });
   return res.data;
 }
 
