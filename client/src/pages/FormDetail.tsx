@@ -1,6 +1,6 @@
 // src/pages/FormDetail.tsx
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import AppShell from "../components/Shell/AppShell";
@@ -190,6 +190,8 @@ export default function FormDetail() {
   const [sites, setSites] = useState<SiteLite[]>([]);
   const [siteLoading, setSiteLoading] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
+  const [siteSearch, setSiteSearch] = useState("");
+  const [sitePickerOpen, setSitePickerOpen] = useState(false);
 
   const [subs, setSubs] = useState<SubmissionListItem[]>([]);
   const [subsLoading, setSubsLoading] = useState(false);
@@ -207,7 +209,24 @@ export default function FormDetail() {
   if (!id) return <Navigate to="/forms" replace />;
 
   const actionBtnStyle: React.CSSProperties = { padding: "6px 10px" };
+  const sitePickerRef = useRef<HTMLDivElement | null>(null);
   const selectedSite = useMemo(() => sites.find((s) => s._id === selectedSiteId) || null, [sites, selectedSiteId]);
+  const filteredSites = useMemo(() => {
+    const q = siteSearch.trim().toLowerCase();
+    if (!q) return sites;
+
+    const rows = sites.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        String(s.address || "").toLowerCase().includes(q)
+    );
+
+    if (selectedSite && !rows.some((s) => s._id === selectedSite._id)) {
+      return [selectedSite, ...rows];
+    }
+
+    return rows;
+  }, [sites, siteSearch, selectedSite]);
 
   // ✅ sensors (scroll/drag daha iyi)
   const sensors = useSensors(
@@ -295,6 +314,17 @@ export default function FormDetail() {
     fetchSubmissions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!sitePickerRef.current) return;
+      if (sitePickerRef.current.contains(event.target as Node)) return;
+      setSitePickerOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
 
   // tpl değiştiyse UI listesi boş kalmasın
   useEffect(() => {
@@ -648,13 +678,94 @@ export default function FormDetail() {
                   <div style={{ display: "grid", gap: 10 }}>
                     <div className="field">
                       <div className="label">Site</div>
-                      <select className="ctrl" value={selectedSiteId} onChange={(e) => setSelectedSiteId(e.target.value)} disabled={saving}>
-                        {sites.map((s) => (
-                          <option key={s._id} value={s._id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div ref={sitePickerRef} style={{ position: "relative" }}>
+                        <button
+                          type="button"
+                          className="ctrl"
+                          disabled={saving}
+                          onClick={() => setSitePickerOpen((prev) => !prev)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            textAlign: "left",
+                            cursor: saving ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {selectedSite?.name || "Site seç"}
+                          </span>
+                          <span className="hint" style={{ marginLeft: 12 }}>
+                            {sitePickerOpen ? "▲" : "▼"}
+                          </span>
+                        </button>
+
+                        {sitePickerOpen ? (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 8px)",
+                              left: 0,
+                              right: 0,
+                              zIndex: 20,
+                              padding: 10,
+                              borderRadius: 12,
+                              border: "1px solid rgba(255,255,255,.12)",
+                              background: "rgba(15,23,42,.98)",
+                              boxShadow: "0 16px 40px rgba(0,0,0,.28)",
+                              display: "grid",
+                              gap: 10,
+                            }}
+                          >
+                            <input
+                              className="ctrl"
+                              value={siteSearch}
+                              onChange={(e) => setSiteSearch(e.target.value)}
+                              placeholder="Site ara: ad veya adres"
+                              autoFocus
+                            />
+
+                            <div
+                              style={{
+                                maxHeight: 240,
+                                overflowY: "auto",
+                                display: "grid",
+                                gap: 6,
+                              }}
+                            >
+                              {filteredSites.length ? (
+                                filteredSites.map((s) => {
+                                  const active = s._id === selectedSiteId;
+                                  return (
+                                    <button
+                                      key={s._id}
+                                      type="button"
+                                      className="btn"
+                                      onClick={() => {
+                                        setSelectedSiteId(s._id);
+                                        setSitePickerOpen(false);
+                                        setSiteSearch("");
+                                      }}
+                                      style={{
+                                        justifyContent: "space-between",
+                                        textAlign: "left",
+                                        background: active ? "rgba(43, 212, 197, 0.12)" : "rgba(255,255,255,.03)",
+                                        borderColor: active ? "rgba(43, 212, 197, 0.28)" : "rgba(255,255,255,.08)",
+                                        color: active ? "#dffcf8" : undefined,
+                                      }}
+                                    >
+                                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                                      {active ? <span style={{ marginLeft: 12 }}>✓</span> : null}
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <div className="hint">Aramaya uygun site bulunamadı.</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                       <div style={{ height: 16 }} />
                       <div className="hint" style={{ marginBottom: 16 }}>
                         {selectedSite?.address ?? ""}
