@@ -164,21 +164,25 @@ function renderBooleanMark(cell) {
   return "";
 }
 
-function renderMatrixHtml(f, submissionValues, site) {
-  const cols = resolveMatrixColumns(f, submissionValues, site);
-  const rows = Array.isArray(f.rows) ? f.rows : [];
-  const defaultCellType = f?.cellType === "text" ? "text" : "boolean";
-
-  if (!cols.length || !rows.length) {
-    return `
-      <div class="matrix-row">
-        <div class="matrix-label">${escapeHtml(f.label)}</div>
-        <div class="value"><span class="muted">Matrix tanımı eksik (rows/columns boş)</span></div>
-      </div>
-    `;
+function chunkArray(list, size) {
+  const chunkSize = Math.max(1, Number(size) || 1);
+  const out = [];
+  for (let i = 0; i < list.length; i += chunkSize) {
+    out.push(list.slice(i, i + chunkSize));
   }
+  return out;
+}
 
-  const denseClass = cols.length >= 6 ? "dense" : "";
+function getMatrixChunkSize(field, cols) {
+  const hasTextColumn =
+    field?.cellType === "text" || cols.some((c) => c?.cellType === "text");
+
+  if (hasTextColumn) return 4;
+  if (field?.columnMode === "personnel") return 5;
+  return 10;
+}
+
+function renderMatrixTable(f, cols, rows, submissionValues, defaultCellType, isDense, chunkIndex, chunkCount) {
   const thead = `
     <tr>
       <th class="mth-left">Evrak Kaydı</th>
@@ -218,15 +222,49 @@ function renderMatrixHtml(f, submissionValues, site) {
     })
     .join("");
 
+  const partLabel =
+    chunkCount > 1
+      ? `<div class="matrix-part-label">Personel Grubu ${chunkIndex + 1} / ${chunkCount}</div>`
+      : "";
+
   return `
-    <div class="matrix-row">
-      <div class="matrix-label">${escapeHtml(f.label)}</div>
+    <div class="matrix-chunk">
+      ${partLabel}
       <div class="mtable-wrap">
-        <table class="mtable ${denseClass}">
+        <table class="mtable ${isDense ? "dense" : ""}">
           <thead>${thead}</thead>
           <tbody>${tbody}</tbody>
         </table>
       </div>
+    </div>
+  `;
+}
+
+function renderMatrixHtml(f, submissionValues, site) {
+  const cols = resolveMatrixColumns(f, submissionValues, site);
+  const rows = Array.isArray(f.rows) ? f.rows : [];
+  const defaultCellType = f?.cellType === "text" ? "text" : "boolean";
+
+  if (!cols.length || !rows.length) {
+    return `
+      <div class="matrix-row">
+        <div class="matrix-label">${escapeHtml(f.label)}</div>
+        <div class="value"><span class="muted">Matrix tanımı eksik (rows/columns boş)</span></div>
+      </div>
+    `;
+  }
+
+  const chunkSize = getMatrixChunkSize(f, cols);
+  const colGroups = chunkArray(cols, chunkSize);
+  const denseClass = cols.length >= chunkSize;
+  const tablesHtml = colGroups
+    .map((group, idx) => renderMatrixTable(f, group, rows, submissionValues, defaultCellType, denseClass, idx, colGroups.length))
+    .join("");
+
+  return `
+    <div class="matrix-row">
+      <div class="matrix-label">${escapeHtml(f.label)}</div>
+      <div class="matrix-chunks">${tablesHtml}</div>
     </div>
   `;
 }
@@ -500,6 +538,9 @@ async function renderPdf(req, { template, site, submission }, opts = {}) {
         .img-cap { margin-top: 6px; font-size: 10px; color: #64748b; }
 
         /* Matrix table styles */
+        .matrix-chunks { display: grid; gap: 10px; }
+        .matrix-chunk { break-inside: avoid-page; page-break-inside: avoid; }
+        .matrix-part-label { margin-bottom: 6px; font-size: 11px; font-weight: 700; color: #475569; }
         .mtable-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; break-inside: avoid-page; page-break-inside: avoid; }
         .mtable { width: 100%; border-collapse: collapse; min-width: 720px; table-layout: auto; font-size: 12px; }
         .mtable thead { display: table-header-group; }
