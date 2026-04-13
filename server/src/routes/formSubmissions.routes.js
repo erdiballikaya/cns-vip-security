@@ -16,6 +16,12 @@ function normalizeEmail(s) {
   return String(s || "").trim().toLowerCase();
 }
 
+const MAIL_BODY_TEXT = `Sayın Yetkili,
+
+Cns Grup tarafından Projenize yapılan ziyaret sonucu hazırlanan rapor tarafınıza iletilmiştir.
+
+Bilgilerinize sunar, iyi çalışmalar dileriz.`;
+
 function toDiskPath(webPath) {
   // webPath: /uploads/pdfs/xxx.pdf
   return path.join(process.cwd(), webPath.replace(/^\//, ""));
@@ -142,7 +148,7 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
         await sendFormPdf({
           to,
           subject,
-          text: "Form PDF ektedir.",
+          text: MAIL_BODY_TEXT,
           pdfAbsPath: pdfAbs,
         });
         const entry = { to, ok: true, at: new Date() };
@@ -228,7 +234,7 @@ router.post("/:id/send", auth, permit("forms.send"), async (req, res) => {
     await sendFormPdf({
       to,
       subject,
-      text: "Form PDF ektedir.",
+      text: MAIL_BODY_TEXT,
       pdfAbsPath: pdfAbs,
     });
     const entry = { to, ok: true, at: new Date() };
