@@ -10,6 +10,7 @@ const Site = require("../models/Site");
 
 const { renderPdf } = require("../services/pdf.service");
 const { sendFormPdf } = require("../services/mail.service");
+const { recordMailLog } = require("../services/mailLog.service");
 
 function normalizeEmail(s) {
   return String(s || "").trim().toLowerCase();
@@ -18,6 +19,36 @@ function normalizeEmail(s) {
 function toDiskPath(webPath) {
   // webPath: /uploads/pdfs/xxx.pdf
   return path.join(process.cwd(), webPath.replace(/^\//, ""));
+}
+
+async function persistMailAttempt({
+  submissionId,
+  template,
+  site,
+  to,
+  ok,
+  error,
+  subject,
+  mode,
+  pdfPath,
+  createdBy,
+  at,
+}) {
+  await recordMailLog({
+    submissionId,
+    templateId: template?._id,
+    templateName: String(template?.name || ""),
+    siteId: site?._id,
+    siteName: String(site?.name || ""),
+    to,
+    ok,
+    error: String(error || ""),
+    subject: String(subject || ""),
+    mode,
+    pdfPath: String(pdfPath || ""),
+    createdBy,
+    sentAt: at || new Date(),
+  });
 }
 
 // create draft
@@ -101,6 +132,7 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
 
     const pdfAbs = toDiskPath(sub.pdfPath);
     const results = [];
+    const subject = `${tpl.name} — ${site.name || "Site"}`;
 
     // ✅ 3) mail gönderim hatalarını logla ama PDF’yi bozma
     let anyFail = false;
@@ -109,18 +141,43 @@ router.post("/:id/complete-and-send", auth, permit("forms.send"), async (req, re
       try {
         await sendFormPdf({
           to,
-          subject: `${tpl.name} — ${site.name || "Site"}`,
+          subject,
           text: "Form PDF ektedir.",
           pdfAbsPath: pdfAbs,
         });
         const entry = { to, ok: true, at: new Date() };
         sub.mailLog.push(entry);
         results.push(entry);
+        await persistMailAttempt({
+          submissionId: sub._id,
+          template: tpl,
+          site,
+          to,
+          ok: true,
+          subject,
+          mode: "bulk",
+          pdfPath: sub.pdfPath,
+          createdBy: req.user?.id,
+          at: entry.at,
+        }).catch((err) => console.error("mail log persist error", err));
       } catch (e) {
         anyFail = true;
         const entry = { to, ok: false, at: new Date(), error: String(e?.message || e) };
         sub.mailLog.push(entry);
         results.push(entry);
+        await persistMailAttempt({
+          submissionId: sub._id,
+          template: tpl,
+          site,
+          to,
+          ok: false,
+          error: entry.error,
+          subject,
+          mode: "bulk",
+          pdfPath: sub.pdfPath,
+          createdBy: req.user?.id,
+          at: entry.at,
+        }).catch((err) => console.error("mail log persist error", err));
       }
     }
 
@@ -166,26 +223,54 @@ router.post("/:id/send", auth, permit("forms.send"), async (req, res) => {
     }
 
     const pdfAbs = toDiskPath(sub.pdfPath);
+    const subject = `${tpl.name} — ${site.name || "Site"}`;
 
     await sendFormPdf({
       to,
-      subject: `${tpl.name} — ${site.name || "Site"}`,
+      subject,
       text: "Form PDF ektedir.",
       pdfAbsPath: pdfAbs,
     });
     const entry = { to, ok: true, at: new Date() };
     sub.mailLog.push(entry);
     await sub.save();
+    await persistMailAttempt({
+      submissionId: sub._id,
+      template: tpl,
+      site,
+      to,
+      ok: true,
+      subject,
+      mode: "manual",
+      pdfPath: sub.pdfPath,
+      createdBy: req.user?.id,
+      at: entry.at,
+    }).catch((err) => console.error("mail log persist error", err));
     res.json({ ok: true, results: [entry], message: "Mail gönderildi." });
   } catch (e) {
     console.error("single-send mail error", e);
     const sub = await FormSubmission.findById(req.params.id).catch(() => null);
+    const tpl = sub ? await FormTemplate.findById(sub.templateId).lean().catch(() => null) : null;
+    const site = sub ? await Site.findById(sub.siteId).lean().catch(() => null) : null;
     const to = normalizeEmail(req.body?.to);
     let entry = null;
     if (sub && to) {
       entry = { to, ok: false, at: new Date(), error: String(e?.message || e) };
       sub.mailLog.push(entry);
       await sub.save().catch(() => null);
+      await persistMailAttempt({
+        submissionId: sub._id,
+        template: tpl,
+        site,
+        to,
+        ok: false,
+        error: entry.error,
+        subject: tpl && site ? `${tpl.name} — ${site.name || "Site"}` : "",
+        mode: "manual",
+        pdfPath: sub.pdfPath,
+        createdBy: req.user?.id,
+        at: entry.at,
+      }).catch(() => null);
     }
     return res.status(500).json({ message: "Mail gönderilemedi", results: entry ? [entry] : [] });
   }

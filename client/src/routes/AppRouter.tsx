@@ -13,6 +13,7 @@ import Users from "../pages/Users";
 import Forms from "../pages/Forms";
 import FormDetail from "../pages/FormDetail";
 import FormFill from "../pages/FormFill";
+import MailLogs from "../pages/MailLogs";
 
 import { ProtectedRoute } from "../routes/ProtectedRoute";
 
@@ -89,6 +90,15 @@ export default function AppRouter() {
           element={
             <ProtectedRoute moduleKey="forms.view">
               <FormDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/mail-logs"
+          element={
+            <ProtectedRoute moduleKey="forms.send">
+              <MailLogs />
             </ProtectedRoute>
           }
         />

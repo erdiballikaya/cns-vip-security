@@ -127,10 +127,10 @@ export default function Forms() {
                     </div>
                     <div className="hint formTemplateCount">{(f.fields || []).length} alan</div>
                   </div>
-                  <div className="formTemplateStats">
+                  {/* <div className="formTemplateStats">
                     <span>{(f.fields || []).length} alan</span>
                     <span>{(f.recipients || []).length} mail alıcısı</span>
-                  </div>
+                  </div> */}
                 </Link>
               ))}
             </div>

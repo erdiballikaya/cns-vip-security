@@ -12,6 +12,7 @@ const formsRoutes = require("./routes/forms.routes");
 const uploadRoutes = require("./routes/upload.routes");
 const statsRoutes = require("./routes/stats.routes");
 const formSubmissionsRoutes = require("./routes/formSubmissions.routes");
+const mailLogsRoutes = require("./routes/mailLogs.routes");
 const pageSchemasRoutes = require("./routes/pageSchemas.routes");
 const pagesRoutes = require("./routes/pages.routes");
 
@@ -46,6 +47,7 @@ app.use("/api/upload", uploadRoutes);
 //app.use("/api/uploads", uploadRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/form-submissions", formSubmissionsRoutes);
+app.use("/api/mail-logs", mailLogsRoutes);
 app.use("/api/page-schemas", pageSchemasRoutes);
 app.use("/api/pages", pagesRoutes);
 
